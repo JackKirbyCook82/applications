@@ -23,7 +23,7 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from yahoo.history import YahooHistoryDownloader
-from finance.variables import DateRange, Symbol
+from finance.variables import DateRange, Querys
 from finance.technicals import TechnicalFiles
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.files import Saver, FileTypes, FileTimings
@@ -38,10 +38,10 @@ __license__ = "MIT License"
 
 
 class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
-class SymbolQueue(Queues.FIFO, query=Symbol): pass
+class SymbolQueue(Queues.FIFO, query=Querys.Symbol): pass
 
 
-def history(*args, source, destination, reader, dates, parameters, **kwargs):
+def history(*args, source, destination, reader, dates, parameters={}, **kwargs):
     history_schedule = Schedule(name="HistorySchedule", source=source)
     history_downloader = YahooHistoryDownloader(name="HistoryDownloader", feed=reader)
     history_saver = Saver(name="HistorySaver", destination=destination)

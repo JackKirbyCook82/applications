@@ -21,10 +21,10 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.valuations import ValuationFiles, ValuationFilter
-from finance.holdings import HoldingFiles, HoldingTable
 from finance.acquisitions import AcquisitionReader, AcquisitionWriter
-from finance.variables import Status, Scenarios, Valuations
+from finance.valuations import ValuationFilter, ValuationFiles
+from finance.holdings import HoldingFiles, HoldingTable
+from finance.variables import Variables
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
 from support.filtering import Criterion
@@ -36,17 +36,17 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def market(*args, source, destination, parameters, criterion, functions, capacity, **kwargs):
+def market(*args, source, destination, criterion, functions, capacity, parameters={}, **kwargs):
     valuation_loader = Loader(name="MarketValuationLoader", source=source)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
-    acquisition_writer = AcquisitionWriter(name="MarketAcquisitionWriter", destination=destination, calculation=Valuations.ARBITRAGE, capacity=capacity, **functions)
+    acquisition_writer = AcquisitionWriter(name="MarketAcquisitionWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
     market_thread.setup(**parameters)
     return market_thread
 
 
-def acquisition(*args, source, destination, parameters, **kwargs):
+def acquisition(*args, source, destination, parameters={}, **kwargs):
     acquisition_reader = AcquisitionReader(name="PortfolioAcquisitionReader", source=source)
     acquisition_saver = Saver(name="PortfolioAcquisitionSaver", destination=destination)
     acquisition_pipeline = acquisition_reader + acquisition_saver
@@ -57,7 +57,7 @@ def acquisition(*args, source, destination, parameters, **kwargs):
 
 def main(*args, **kwargs):
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.2).astype(np.int32)
-    priority_function = lambda cols: cols[("apy", str(Scenarios.MINIMUM.name).lower())]
+    priority_function = lambda cols: cols[("apy", str(Variables.Scenarios.MINIMUM.name).lower())]
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 5}, Criterion.NULL: ["apy", "size"]}
     functions = dict(liquidity=liquidity_function, priority=priority_function)
     criterion = dict(valuation=valuation_criterion)
@@ -66,8 +66,8 @@ def main(*args, **kwargs):
     acquisitions_table = HoldingTable(name="AcquisitionTable")
     market_parameters = dict(source={arbitrage_file: "r"}, destination=acquisitions_table, functions=functions, criterion=criterion, capacity=None)
     market_thread = market(*args, **market_parameters, **kwargs)
-    acquisitions_parameters = dict(source=acquisitions_table, destination={holdings_file: "a"})
-    acquisition_thread = acquisition(*args, **acquisitions_parameters, **kwargs)
+    acquisition_parameters = dict(source=acquisitions_table, destination={holdings_file: "a"})
+    acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
     market_thread.start()
     market_thread.join()
     acquisition_thread.start()
@@ -75,7 +75,7 @@ def main(*args, **kwargs):
         print(str(acquisitions_table))
         if not bool(acquisitions_table):
             break
-        acquisitions_table[0:25, "status"] = Status.PURCHASED
+        acquisitions_table[0:25, "status"] = Variables.Status.PURCHASED
         time.sleep(2)
     acquisition_thread.cease()
     acquisition_thread.join()
