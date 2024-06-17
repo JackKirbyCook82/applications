@@ -44,7 +44,7 @@ def main(*args, **kwargs):
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     statistics_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     stochastics_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    technical_calculations = [Variables.echnicals.STATISTIC, Variables.Technicals.STOCHASTIC]
+    technical_calculations = [Variables.Technicals.STATISTIC, Variables.Technicals.STOCHASTIC]
     technical_parameters = dict(source={bars_file: "r"}, destination={statistics_file: "w", stochastics_file: "w"}, calculations=technical_calculations)
     technical_thread = technical(*args, **technical_parameters, **kwargs)
     technical_thread.start()
