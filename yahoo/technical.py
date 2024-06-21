@@ -19,8 +19,8 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from finance.technicals import TechnicalCalculator, TechnicalFiles
-from finance.variables import Variables
-from support.files import Loader, Saver, FileTypes, FileTimings
+from finance.variables import Querys, Variables
+from support.files import Loader, Saver, Directory, FileTypes, FileTimings
 from support.synchronize import SideThread
 
 __version__ = "1.0.0"
@@ -30,10 +30,17 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def technical(*args, source, destination, calculations, parameters={}, **kwargs):
-    technical_loader = Loader(name="TechnicalLoader", source=source)
+class SymbolLoader(Loader, query=("symbol", Querys.Symbol)): pass
+class SymbolSaver(Saver, query=("symbol", Querys.Symbol)): pass
+class SymbolDirectory(Directory):
+    @staticmethod
+    def parser(filename): return Querys.Symbol(filename)
+
+
+def technical(*args, loading, saving, directory, calculations=[], parameters={}, **kwargs):
+    technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory)
     technical_calculator = TechnicalCalculator(name="TechnicalCalculator", calculations=calculations)
-    technical_saver = Saver(name="TechnicalSaver", destination=destination)
+    technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
     technical_pipeline = technical_loader + technical_calculator + technical_saver
     technical_thread = SideThread(technical_pipeline, name="TechnicalThread")
     technical_thread.setup(**parameters)
@@ -42,10 +49,11 @@ def technical(*args, source, destination, calculations, parameters={}, **kwargs)
 
 def main(*args, **kwargs):
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    statistics_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    stochastics_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    technical_calculations = [Variables.Technicals.STATISTIC, Variables.Technicals.STOCHASTIC]
-    technical_parameters = dict(source={bars_file: "r"}, destination={statistics_file: "w", stochastics_file: "w"}, calculations=technical_calculations)
+    statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    bars_directory = SymbolDirectory(name="BarsDirectory", repository=HISTORY, variable="bars")
+    calculations = [Variables.Technicals.STATISTIC, Variables.Technicals.STOCHASTIC]
+    technical_parameters = dict(loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"}, directory=bars_directory, calculations=calculations)
     technical_thread = technical(*args, **technical_parameters, **kwargs)
     technical_thread.start()
     technical_thread.join()
@@ -54,7 +62,8 @@ def main(*args, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    main(parameters={"period": 252})
+    sysParameters = dict(period=252)
+    main(parameters=sysParameters)
 
 
 

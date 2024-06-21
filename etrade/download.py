@@ -28,7 +28,7 @@ from finance.variables import DateRange, Querys
 from finance.securities import SecurityFiles
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.files import Saver, FileTypes, FileTimings
-from support.queues import Schedule, Scheduler, Queues
+from support.queues import Dequeuer, Requeuer, Queues
 from support.synchronize import SideThread
 
 __version__ = "1.0.0"
@@ -46,39 +46,42 @@ base = "https://api.etrade.com"
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-class SymbolQueue(Queues.FIFO, query=Querys.Symbol): pass
-class ContractQueue(Queues.FIFO, query=Querys.Contract): pass
+class SymbolDequeuer(Dequeuer, query=("symbol", Querys.Symbol)): pass
+class ContractRequeuer(Requeuer, query=("contract", Querys.Contract)): pass
+class ContractDequeuer(Dequeuer, query=("contract", Querys.Contract)): pass
+class ContractSaver(Saver, query=("contract", Querys.Contract)): pass
 
 
-def contracts(*args, source, destination, reader, expires, parameters={}, **kwargs):
-    contract_schedule = Schedule(name="MarketContractSchedule", source=source)
+def contracts(*args, reader, source, destination, expires=[], parameters={}, **kwargs):
+    contract_dequeuer = SymbolDequeuer(name="MarketContractDequeuer", source=source)
     contract_downloader = ETradeContractDownloader(name="MarketContractDownloader", feed=reader)
-    contract_scheduler = Scheduler(name="MarketContractScheduler", destination=destination)
-    contract_pipeline = contract_schedule + contract_downloader + contract_scheduler
+    contract_requeuer = ContractRequeuer(name="MarketContractRequeuer", destination=destination)
+    contract_pipeline = contract_dequeuer + contract_downloader + contract_requeuer
     contract_thread = SideThread(contract_pipeline, name="MarketContractThread")
     contract_thread.setup(expires=expires, **parameters)
     return contract_thread
 
 
-def security(*args, source, destination, reader, parameters={}, **kwargs):
-    security_schedule = Schedule(name="MarketSecuritySchedule", source=source)
+def security(*args, reader, source, saving, parameters={}, **kwargs):
+    security_dequeuer = ContractDequeuer(name="MarketSecurityDequeuer", source=source)
     security_downloader = ETradeMarketDownloader(name="MarketSecurityDownloader", feed=reader)
-    security_saver = Saver(name="MarketSecuritySaver", destination=destination)
-    security_pipeline = security_schedule + security_downloader + security_saver
+    security_saver = ContractSaver(name="MarketSecuritySaver", destination=saving)
+    security_pipeline = security_dequeuer + security_downloader + security_saver
     security_thread = SideThread(security_pipeline, name="MarketSecurityThread")
     security_thread.setup(**parameters)
     return security_thread
 
 
-def main(*args, apikey, apicode, tickers, **kwargs):
-    symbol_queue = SymbolQueue(name="SymbolQueue", querys=list(tickers), capacity=None)
-    contract_queue = ContractQueue(name="ContractQueue", querys=[], capacity=None)
+def main(*args, apikey, apicode, tickers=[], **kwargs):
+    symbols = [Querys.Symbol(ticker) for ticker in tickers]
+    contract_queue = Queues.FIFO(name="ContractQueue", contents=list(symbols), capacity=None)
+    security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Options(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=apikey, apicode=apicode)
     with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as security_reader:
-        contract_parameters = dict(source=symbol_queue, destination=contract_queue, reader=security_reader)
+        contract_parameters = dict(reader=security_reader, source=contract_queue, destination=contract_queue)
         contract_thread = contracts(*args, **contract_parameters, **kwargs)
-        security_parameters = dict(source=contract_queue, destination={option_file: "w"}, reader=security_reader)
+        security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"})
         security_thread = security(*args, **security_parameters, **kwargs)
         contract_thread.start()
         contract_thread.join()
@@ -95,7 +98,8 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:2]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
-    main(apikey=sysApiKey, apicode=sysApiCode, tickers=sysTickers, expires=sysExpires, parameters={})
+    sysParameters = dict()
+    main(apikey=sysApiKey, apicode=sysApiCode, tickers=sysTickers, expires=sysExpires, parameters=sysParameters)
 
 
 

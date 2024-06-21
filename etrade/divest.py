@@ -12,6 +12,7 @@ import time
 import logging
 import warnings
 import numpy as np
+from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -24,8 +25,8 @@ from finance.divestitures import DivestitureReader, DivestitureWriter
 from finance.valuations import ValuationFilter, ValuationFiles
 from finance.holdings import HoldingFiles, HoldingTable
 from finance.exposures import ExposureFiles
-from finance.variables import Variables
-from support.files import Loader, Saver, FileTypes, FileTimings
+from finance.variables import Querys, Variables
+from support.files import Loader, Saver, Directory, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
 from support.filtering import Criterion
 
@@ -36,19 +37,30 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def portfolio(*args, source, destination, criterion, functions, capacity, parameters={}, **kwargs):
-    valuation_loader = Loader(name="PortfolioValuationLoader", source=source)
-    valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    divestiture_writer = DivestitureWriter(name="PortfolioDivestitureWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
+class ContractLoader(Loader, query=("contract", Querys.Contract)): pass
+class ContractSaver(Saver, query=("contract", Querys.Contract)): pass
+class ContractDirectory(Directory):
+    @staticmethod
+    def parser(filename):
+        ticker, expire = str(filename).split("_")
+        ticker = str(ticker).upper()
+        expire = Datetime.strptime(expire, "%Y%m%d")
+        return Querys.Contract(ticker, expire)
+
+
+def portfolio(*args, loading, saving, directory, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
+    valuation_loader = ContractLoader(name="PortfolioValuationLoader", source=loading, directory=directory)
+    valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterions["valuation"])
+    divestiture_writer = DivestitureWriter(name="PortfolioDivestitureWriter", destination=saving, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
     portfolio_pipeline = valuation_loader + valuation_filter + divestiture_writer
     portfolio_thread = SideThread(portfolio_pipeline, name="PortfolioValuationThread")
     portfolio_thread.setup(**parameters)
     return portfolio_thread
 
 
-def divestiture(*args, source, destination, parameters={}, **kwargs):
+def divestiture(*args, source, saving, parameters={}, **kwargs):
     divestiture_reader = DivestitureReader(name="PortfolioDivestitureReader", source=source)
-    divestiture_saver = Saver(name="PortfolioDivestitureSaver", destination=destination)
+    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", destination=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
     divestiture_thread = CycleThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)
     divestiture_thread.setup(**parameters)
@@ -60,14 +72,15 @@ def main(*args, **kwargs):
     priority_function = lambda cols: cols[("apy", str(Variables.Scenarios.MINIMUM.name).lower())]
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 5}, Criterion.NULL: ["apy", "size"]}
     functions = dict(liquidity=liquidity_function, priority=priority_function)
-    criterion = dict(valuation=valuation_criterion)
+    criterions = dict(valuation=valuation_criterion)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     exposure_file = ExposureFiles.Exposure(name="ExposureFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    arbitrage_directory = ContractDirectory(name="ArbitrageDirectory", repository=PORTFOLIO, variable="arbitrage")
     divestiture_table = HoldingTable(name="DivestitureTable")
-    portfolio_parameters = dict(source={exposure_file: "r", arbitrage_file: "r"}, destination=divestiture_table, functions=functions, criterion=criterion, capacity=None)
+    portfolio_parameters = dict(loading={exposure_file: "r", arbitrage_file: "r"}, directory=arbitrage_directory, destination=divestiture_table, functions=functions, criterion=criterions, capacity=None)
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
-    divestiture_parameters = dict(source=divestiture_table, destination={holdings_file: "a"})
+    divestiture_parameters = dict(source=divestiture_table, saving={holdings_file: "a"})
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
     portfolio_thread.start()
     portfolio_thread.stop()
@@ -85,7 +98,8 @@ def main(*args, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    main(parameters={})
+    sysParameters = dict()
+    main(parameters=sysParameters)
 
 
 

@@ -27,7 +27,7 @@ from finance.variables import DateRange, Querys
 from finance.technicals import TechnicalFiles
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.files import Saver, FileTypes, FileTimings
-from support.queues import Schedule, Queues
+from support.queues import Dequeuer, Queues
 from support.synchronize import SideThread
 
 __version__ = "1.0.0"
@@ -38,24 +38,26 @@ __license__ = "MIT License"
 
 
 class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
-class SymbolQueue(Queues.FIFO, query=Querys.Symbol): pass
+class SymbolDequeuer(Dequeuer, query=("symbol", Querys.Symbol)): pass
+class SymbolSaver(Saver, query=("symbol", Querys.Symbol)): pass
 
 
-def history(*args, source, destination, reader, dates, parameters={}, **kwargs):
-    history_schedule = Schedule(name="HistorySchedule", source=source)
+def history(*args, reader, source, saving, dates=[], parameters={}, **kwargs):
+    history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", source=source)
     history_downloader = YahooHistoryDownloader(name="HistoryDownloader", feed=reader)
-    history_saver = Saver(name="HistorySaver", destination=destination)
-    history_pipeline = history_schedule + history_downloader + history_saver
+    history_saver = SymbolSaver(name="HistorySaver", destination=saving)
+    history_pipeline = history_dequeuer + history_downloader + history_saver
     history_thread = SideThread(history_pipeline, name="HistoryThread")
     history_thread.setup(dates=dates, **parameters)
     return history_thread
 
 
-def main(*args, tickers, **kwargs):
-    symbol_queue = SymbolQueue(name="SymbolQueue", querys=list(tickers), capacity=None)
+def main(*args, tickers=[], **kwargs):
+    symbols = [Querys.Symbol(ticker) for ticker in tickers]
+    bars_queue = Queues.FIFO(name="BarsQueue", contents=list(symbols), capacity=None)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     with YahooDriver(name="HistoryReader") as history_reader:
-        history_parameters = dict(source=symbol_queue, destination={bars_file: "w"}, reader=history_reader)
+        history_parameters = dict(reader=history_reader, source=bars_queue, saving={bars_file: "w"})
         history_thread = history(*args, **history_parameters, **kwargs)
         history_thread.start()
         history_thread.join()
@@ -68,7 +70,8 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:2]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=60)).date()])
-    main(tickers=sysTickers, dates=sysDates, parameters={})
+    sysParameters = dict()
+    main(tickers=sysTickers, dates=sysDates, parameters=sysParameters)
 
 
 
