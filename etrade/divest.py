@@ -48,10 +48,10 @@ class ContractDirectory(Directory):
         return Querys.Contract(ticker, expire)
 
 
-def portfolio(*args, loading, saving, directory, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
+def portfolio(*args, loading, destination, directory, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
     valuation_loader = ContractLoader(name="PortfolioValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterions["valuation"])
-    divestiture_writer = DivestitureWriter(name="PortfolioDivestitureWriter", destination=saving, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
+    divestiture_writer = DivestitureWriter(name="PortfolioDivestitureWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
     portfolio_pipeline = valuation_loader + valuation_filter + divestiture_writer
     portfolio_thread = SideThread(portfolio_pipeline, name="PortfolioValuationThread")
     portfolio_thread.setup(**parameters)

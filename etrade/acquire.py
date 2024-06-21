@@ -48,10 +48,10 @@ class ContractDirectory(Directory):
         return Querys.Contract(ticker, expire)
 
 
-def market(*args, loading, saving, directory, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
+def market(*args, loading, directory, destination, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterions["valuation"])
-    acquisition_writer = AcquisitionWriter(name="MarketAcquisitionWriter", destination=saving, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
+    acquisition_writer = AcquisitionWriter(name="MarketAcquisitionWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
     market_thread.setup(**parameters)

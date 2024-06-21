@@ -79,7 +79,7 @@ def main(*args, apikey, apicode, tickers=[], **kwargs):
     option_file = SecurityFiles.Options(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=apikey, apicode=apicode)
     with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as security_reader:
-        contract_parameters = dict(reader=security_reader, source=contract_queue, destination=contract_queue)
+        contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue)
         contract_thread = contracts(*args, **contract_parameters, **kwargs)
         security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"})
         security_thread = security(*args, **security_parameters, **kwargs)
