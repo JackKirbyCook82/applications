@@ -37,9 +37,9 @@ class SymbolDirectory(Directory):
     def parser(filename): return Querys.Symbol(filename)
 
 
-def technical(*args, loading, saving, directory, calculations=[], parameters={}, **kwargs):
+def technical(*args, loading, saving, directory, calculations={}, parameters={}, **kwargs):
     technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory)
-    technical_calculator = TechnicalCalculator(name="TechnicalCalculator", calculations=calculations)
+    technical_calculator = TechnicalCalculator(name="TechnicalCalculator", calculations=calculations["technical"])
     technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
     technical_pipeline = technical_loader + technical_calculator + technical_saver
     technical_thread = SideThread(technical_pipeline, name="TechnicalThread")
@@ -48,13 +48,14 @@ def technical(*args, loading, saving, directory, calculations=[], parameters={},
 
 
 def main(*args, **kwargs):
+    technical_calculation = [Variables.Technicals.STATISTIC, Variables.Technicals.STOCHASTIC]
+    calculations = dict(technical=technical_calculation)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     bars_directory = SymbolDirectory(name="BarsDirectory", repository=HISTORY, variable="bars")
-    calculations = [Variables.Technicals.STATISTIC, Variables.Technicals.STOCHASTIC]
-    technical_parameters = dict(loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"}, directory=bars_directory, calculations=calculations)
-    technical_thread = technical(*args, **technical_parameters, **kwargs)
+    technical_parameters = dict(loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"}, directory=bars_directory)
+    technical_thread = technical(*args, **technical_parameters, calculations=calculations, **kwargs)
     technical_thread.start()
     technical_thread.join()
 

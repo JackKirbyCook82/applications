@@ -48,7 +48,7 @@ class ContractDirectory(Directory):
 def valuation(*args, loading, saving, directory, calculations=[], criterions={}, parameters={}, **kwargs):
     security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterions["security"])
-    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", calculations=calculations)
+    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", calculations=calculations["strategy"])
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", calculation=Variables.Valuations.ARBITRAGE)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterions["valuation"])
     valuation_saver = ContractSaver(name="MarketValuationSaver", destination=saving)
@@ -61,13 +61,14 @@ def valuation(*args, loading, saving, directory, calculations=[], criterions={},
 def main(*args, **kwargs):
     security_criterion = {Criterion.FLOOR: {"volume": 25, "interest": 25, "size": 10}, Criterion.NULL: ["volume", "interest", "size"]}
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    strategy_calculations = [Strategies.Collar.Long, Strategies.Collar.Short, Strategies.Vertical.Put, Strategies.Vertical.Call]
     criterions = dict(security=security_criterion, valuation=valuation_criterion)
-    calculations = [Strategies.Collar.Long, Strategies.Collar.Short, Strategies.Vertical.Put, Strategies.Vertical.Call]
+    calculations = dict(strategy=strategy_calculations)
     option_file = SecurityFiles.Options(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    options_directory = ContractDirectory(name="OptionsDirectory", repository=MARKET, variable="option")
-    valuation_parameters = dict(loading={option_file: "r"}, saving={arbitrage_file: "w"}, directory=options_directory, calculations=calculations, criterions=criterions)
-    valuation_thread = valuation(*args, **valuation_parameters, **kwargs)
+    option_directory = ContractDirectory(name="OptionsDirectory", repository=MARKET, variable="option")
+    valuation_parameters = dict(loading={option_file: "r"}, saving={arbitrage_file: "w"}, directory=option_directory)
+    valuation_thread = valuation(*args, **valuation_parameters, calculations=calculations, criterions=criterions, **kwargs)
     valuation_thread.start()
     valuation_thread.join()
 
