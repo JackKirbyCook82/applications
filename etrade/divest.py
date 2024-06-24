@@ -21,9 +21,8 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.divestitures import DivestitureReader, DivestitureWriter
+from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
 from finance.valuations import ValuationFilter, ValuationFiles
-from finance.holdings import HoldingFiles, HoldingTable
 from finance.exposures import ExposureFiles
 from finance.variables import Querys, Variables
 from support.files import Loader, Saver, Directory, FileTypes, FileTimings
@@ -51,7 +50,7 @@ class ContractDirectory(Directory):
 def portfolio(*args, loading, destination, directory, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
     valuation_loader = ContractLoader(name="PortfolioValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterions["valuation"])
-    divestiture_writer = DivestitureWriter(name="PortfolioDivestitureWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
+    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
     portfolio_pipeline = valuation_loader + valuation_filter + divestiture_writer
     portfolio_thread = SideThread(portfolio_pipeline, name="PortfolioValuationThread")
     portfolio_thread.setup(**parameters)
@@ -59,7 +58,7 @@ def portfolio(*args, loading, destination, directory, capacity=None, criterions=
 
 
 def divestiture(*args, source, saving, parameters={}, **kwargs):
-    divestiture_reader = DivestitureReader(name="PortfolioDivestitureReader", source=source)
+    divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", source=source)
     divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", destination=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
     divestiture_thread = CycleThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)

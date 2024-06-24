@@ -22,9 +22,8 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.acquisitions import AcquisitionReader, AcquisitionWriter
+from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
 from finance.valuations import ValuationFilter, ValuationFiles
-from finance.holdings import HoldingFiles, HoldingTable
 from finance.variables import Querys, Variables
 from support.files import Loader, Saver, Directory, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
@@ -51,7 +50,7 @@ class ContractDirectory(Directory):
 def market(*args, loading, directory, destination, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterions["valuation"])
-    acquisition_writer = AcquisitionWriter(name="MarketAcquisitionWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
+    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
     market_thread.setup(**parameters)
@@ -59,7 +58,7 @@ def market(*args, loading, directory, destination, capacity=None, criterions={},
 
 
 def acquisition(*args, source, saving, parameters={}, **kwargs):
-    acquisition_reader = AcquisitionReader(name="PortfolioAcquisitionReader", source=source)
+    acquisition_reader = HoldingReader(name="PortfolioAcquisitionReader", source=source)
     acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", destination=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
     acquisition_thread = CycleThread(acquisition_pipeline, name="PortfolioAcquisitionThread", wait=10)
