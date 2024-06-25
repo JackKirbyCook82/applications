@@ -22,7 +22,7 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
-from finance.securities import SecurityCalculator, SecurityFilter, SecurityFiles
+from finance.securities import OptionCalculator, OptionFilter, OptionFiles
 from finance.exposures import ExposureCalculator, ExposureFiles
 from finance.variables import Strategies, Querys, Variables
 from finance.strategies import StrategyCalculator
@@ -60,9 +60,9 @@ def exposure(*args, loading, saving, directory, parameters={}, **kwargs):
     return exposure_thread
 
 
-def security(*args, loading, saving, directory, current, calculations={}, functions={}, parameters={}, **kwargs):
+def security(*args, loading, saving, directory, current, functions={}, parameters={}, **kwargs):
     exposure_loader = ContractLoader(name="PortfolioExposureLoader", source=loading, directory=directory)
-    security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", calculations=calculations["security"], **functions)
+    security_calculator = OptionCalculator(name="PortfolioSecurityCalculator", **functions)
     security_saver = ContractSaver(name="PortfolioSecuritySaver", destination=saving)
     security_pipeline = exposure_loader + security_calculator + security_saver
     security_thread = SideThread(security_pipeline, name="PortfolioSecurityThread")
@@ -72,7 +72,7 @@ def security(*args, loading, saving, directory, current, calculations={}, functi
 
 def valuation(*args, loading, saving, directory, calculations={}, criterions={}, parameters={}, **kwargs):
     security_loader = ContractLoader(name="PortfolioSecurityLoader", source=loading, directory=directory)
-    security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterions["security"])
+    security_filter = OptionFilter(name="PortfolioSecurityFilter", criterion=criterions["security"])
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator", calculations=calculations["strategy"])
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", calculation=Variables.Valuations.ARBITRAGE)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterions["valuation"])
@@ -87,14 +87,13 @@ def main(*args, **kwargs):
     security_criterion = {Criterion.FLOOR: {"size": 10}, Criterion.NULL: ["size"]}
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
     strategy_calculations = [Strategies.Collar.Long, Strategies.Collar.Short, Strategies.Vertical.Put, Strategies.Vertical.Call]
-    security_calculations = [Variables.Instruments.OPTION]
     functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN)
     criterions = dict(security=security_criterion, valuation=valuation_criterion)
-    calculations = dict(strategy=strategy_calculations, security=security_calculations)
+    calculations = dict(strategy=strategy_calculations)
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     exposure_file = ExposureFiles.Exposure(name="ExposureFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    option_file = SecurityFiles.Options(name="OptionFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    option_file = OptionFiles.Options(name="OptionFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_directory = ContractDirectory(name="HoldingDirectory", repository=PORTFOLIO, variable="holdings")
     exposure_directory = ContractDirectory(name="ExposureDirectory", repository=PORTFOLIO, variable="exposure")
