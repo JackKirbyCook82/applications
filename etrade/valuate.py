@@ -19,13 +19,12 @@ MARKET = os.path.join(ROOT, "repository", "market")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
+from finance.variables import Variables
 from finance.securities import SecurityFilter, SecurityFiles
-from finance.variables import Strategies, Querys, Variables
 from finance.strategies import StrategyCalculator
+from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
 from support.files import Loader, Saver, Directory, FileTypes, FileTimings
 from support.synchronize import SideThread
-from support.filtering import Criterion
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -34,23 +33,23 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=("contract", Querys.Contract)): pass
-class ContractSaver(Saver, query=("contract", Querys.Contract)): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 class ContractDirectory(Directory):
     @staticmethod
     def parser(filename):
         ticker, expire = str(filename).split("_")
         ticker = str(ticker).upper()
         expire = Datetime.strptime(expire, "%Y%m%d")
-        return Querys.Contract(ticker, expire)
+        return Variables.Querys.Contract(ticker, expire)
 
 
-def valuation(*args, loading, saving, directory, calculations=[], criterions={}, parameters={}, **kwargs):
+def valuation(*args, loading, saving, directory, parameters={}, **kwargs):
     security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory)
-    security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterions["security"])
-    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", calculations=calculations["strategy"])
-    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", calculation=Variables.Valuations.ARBITRAGE)
-    valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterions["valuation"])
+    security_filter = SecurityFilter(name="MarketSecurityFilter")
+    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator")
+    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator")
+    valuation_filter = ValuationFilter(name="MarketValuationFilter")
     valuation_saver = ContractSaver(name="MarketValuationSaver", destination=saving)
     valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver
     valuation_thread = SideThread(valuation_pipeline, name="MarketValuationThread")
@@ -59,16 +58,11 @@ def valuation(*args, loading, saving, directory, calculations=[], criterions={},
 
 
 def main(*args, **kwargs):
-    security_criterion = {Criterion.FLOOR: {"volume": 25, "interest": 25, "size": 10}, Criterion.NULL: ["volume", "interest", "size"]}
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
-    strategy_calculations = [Strategies.Collar.Long, Strategies.Collar.Short, Strategies.Vertical.Put, Strategies.Vertical.Call]
-    criterions = dict(security=security_criterion, valuation=valuation_criterion)
-    calculations = dict(strategy=strategy_calculations)
-    option_file = SecurityFiles.Options(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    option_directory = ContractDirectory(name="OptionsDirectory", repository=MARKET, variable="option")
+    option_directory = ContractDirectory(name="OptionsDirectory", repository=MARKET, variable=Variables.Instruments.OPTION)
     valuation_parameters = dict(loading={option_file: "r"}, saving={arbitrage_file: "w"}, directory=option_directory)
-    valuation_thread = valuation(*args, **valuation_parameters, calculations=calculations, criterions=criterions, **kwargs)
+    valuation_thread = valuation(*args, **valuation_parameters, **kwargs)
     valuation_thread.start()
     valuation_thread.join()
 

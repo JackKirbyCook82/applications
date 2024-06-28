@@ -18,8 +18,8 @@ HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
+from finance.variables import Variables
 from finance.technicals import TechnicalCalculator, TechnicalFiles
-from finance.variables import Querys, Variables
 from support.files import Loader, Saver, Directory, FileTypes, FileTimings
 from support.synchronize import SideThread
 
@@ -30,16 +30,16 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolLoader(Loader, query=("symbol", Querys.Symbol)): pass
-class SymbolSaver(Saver, query=("symbol", Querys.Symbol)): pass
+class SymbolLoader(Loader, query=Variables.Querys.SYMBOL): pass
+class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
 class SymbolDirectory(Directory):
     @staticmethod
-    def parser(filename): return Querys.Symbol(filename)
+    def parser(filename): return Variables.Querys.SYMBOL(filename)
 
 
-def technical(*args, loading, saving, directory, calculations={}, parameters={}, **kwargs):
+def technical(*args, loading, saving, directory, parameters={}, **kwargs):
     technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory)
-    technical_calculator = TechnicalCalculator(name="TechnicalCalculator", calculations=calculations["technical"])
+    technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
     technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
     technical_pipeline = technical_loader + technical_calculator + technical_saver
     technical_thread = SideThread(technical_pipeline, name="TechnicalThread")
@@ -48,14 +48,12 @@ def technical(*args, loading, saving, directory, calculations={}, parameters={},
 
 
 def main(*args, **kwargs):
-    technical_calculation = [Variables.Technicals.STATISTIC, Variables.Technicals.STOCHASTIC]
-    calculations = dict(technical=technical_calculation)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    bars_directory = SymbolDirectory(name="BarsDirectory", repository=HISTORY, variable="bars")
+    bars_directory = SymbolDirectory(name="BarsDirectory", repository=HISTORY, variable=Variables.Technicals.BARS)
     technical_parameters = dict(loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"}, directory=bars_directory)
-    technical_thread = technical(*args, **technical_parameters, calculations=calculations, **kwargs)
+    technical_thread = technical(*args, **technical_parameters, **kwargs)
     technical_thread.start()
     technical_thread.join()
 

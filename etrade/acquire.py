@@ -11,7 +11,6 @@ import sys
 import time
 import logging
 import warnings
-import numpy as np
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -22,12 +21,11 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
+from finance.variables import Variables
 from finance.valuations import ValuationFilter, ValuationFiles
-from finance.variables import Querys, Variables
+from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
 from support.files import Loader, Saver, Directory, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
-from support.filtering import Criterion
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -36,21 +34,21 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=("contract", Querys.Contract)): pass
-class ContractSaver(Saver, query=("contract", Querys.Contract)): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 class ContractDirectory(Directory):
     @staticmethod
     def parser(filename):
         ticker, expire = str(filename).split("_")
         ticker = str(ticker).upper()
         expire = Datetime.strptime(expire, "%Y%m%d")
-        return Querys.Contract(ticker, expire)
+        return Variables.Querys.CONTRACT(ticker, expire)
 
 
-def market(*args, loading, directory, destination, capacity=None, criterions={}, functions={}, parameters={}, **kwargs):
+def market(*args, loading, directory, destination, parameters={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
-    valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterions["valuation"])
-    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination, calculation=Variables.Valuations.ARBITRAGE, capacity=capacity, **functions)
+    valuation_filter = ValuationFilter(name="MarketValuationFilter")
+    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
     market_thread.setup(**parameters)
@@ -67,19 +65,14 @@ def acquisition(*args, source, saving, parameters={}, **kwargs):
 
 
 def main(*args, **kwargs):
-    liquidity_function = lambda cols: np.floor(cols["size"] * 0.2).astype(np.int32)
-    priority_function = lambda cols: cols[("apy", str(Variables.Scenarios.MINIMUM.name).lower())]
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 5}, Criterion.NULL: ["apy", "size"]}
-    functions = dict(liquidity=liquidity_function, priority=priority_function)
-    criterions = dict(valuation=valuation_criterion)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    arbitrage_directory = ContractDirectory(name="ArbitrageDirectory", repository=MARKET, variable="arbitrage")
+    arbitrage_directory = ContractDirectory(name="ArbitrageDirectory", repository=MARKET, variable=Variables.Valuations.ARBITRAGE)
     acquisitions_table = HoldingTable(name="AcquisitionTable")
     market_parameters = dict(loading={arbitrage_file: "r"}, directory=arbitrage_directory, destination=acquisitions_table)
-    market_thread = market(*args, **market_parameters, functions=functions, criterions=criterions, capacity=None, **kwargs)
     acquisition_parameters = dict(source=acquisitions_table, saving={holdings_file: "a"})
-    acquisition_thread = acquisition(*args, **acquisition_parameters, functions=functions, criterions=criterions, capacity=None, **kwargs)
+    market_thread = market(*args, **market_parameters, **kwargs)
+    acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
     market_thread.start()
     market_thread.join()
     acquisition_thread.start()
