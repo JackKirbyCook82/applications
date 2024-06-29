@@ -32,9 +32,7 @@ __license__ = "MIT License"
 
 class SymbolLoader(Loader, query=Variables.Querys.SYMBOL): pass
 class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
-class SymbolDirectory(Directory):
-    @staticmethod
-    def parser(filename): return Variables.Querys.SYMBOL(filename)
+class SymbolDirectory(Directory, query=Variables.Querys.SYMBOL): pass
 
 
 def technical(*args, loading, saving, directory, parameters={}, **kwargs):

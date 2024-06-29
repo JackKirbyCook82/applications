@@ -35,13 +35,7 @@ __license__ = "MIT License"
 
 class ContractLoader(Loader, query=Variables.Querys.CONTRACT): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
-class ContractDirectory(Directory):
-    @staticmethod
-    def parser(filename):
-        ticker, expire = str(filename).split("_")
-        ticker = str(ticker).upper()
-        expire = Datetime.strptime(expire, "%Y%m%d")
-        return Variables.Querys.Contract(ticker, expire)
+class ContractDirectory(Directory, query=Variables.Querys.CONTRACT): pass
 
 
 def valuation(*args, loading, saving, directory, parameters={}, **kwargs):
