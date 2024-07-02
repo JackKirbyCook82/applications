@@ -11,7 +11,6 @@ import sys
 import time
 import logging
 import warnings
-from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -21,10 +20,10 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables
+from finance.variables import Variables, Contract
 from finance.valuations import ValuationFilter, ValuationFiles
-from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
-from support.files import Loader, Saver, Directory, FileTypes, FileTimings
+from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
+from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
 
 __version__ = "1.0.0"
@@ -34,12 +33,11 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
-class ContractDirectory(Directory, query=Variables.Querys.CONTRACT): pass
 
 
-def market(*args, loading, directory, destination, parameters={}, **kwargs):
+def market(*args, directory, loading, destination, parameters={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="MarketValuationFilter")
     acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination)
@@ -61,9 +59,8 @@ def acquisition(*args, source, saving, parameters={}, **kwargs):
 def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    arbitrage_directory = ContractDirectory(name="ArbitrageDirectory", repository=MARKET, variable=Variables.Valuations.ARBITRAGE)
     acquisitions_table = HoldingTable(name="AcquisitionTable")
-    market_parameters = dict(loading={arbitrage_file: "r"}, directory=arbitrage_directory, destination=acquisitions_table)
+    market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, destination=acquisitions_table)
     acquisition_parameters = dict(source=acquisitions_table, saving={holdings_file: "a"})
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
@@ -75,7 +72,7 @@ def main(*args, **kwargs):
         if not bool(acquisitions_table):
             break
         acquisitions_table[0:25, "status"] = Variables.Status.PURCHASED
-        time.sleep(2)
+        time.sleep(5)
     acquisition_thread.cease()
     acquisition_thread.join()
 

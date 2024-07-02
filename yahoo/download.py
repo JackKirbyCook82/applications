@@ -23,7 +23,7 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from yahoo.history import YahooHistoryDownloader
-from finance.variables import Variables, DateRange
+from finance.variables import Variables, DateRange, Symbol
 from finance.technicals import TechnicalFiles
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.files import Saver, FileTypes, FileTimings
@@ -53,7 +53,7 @@ def history(*args, reader, source, saving, dates=[], parameters={}, **kwargs):
 
 
 def main(*args, symbols=[], **kwargs):
-    bars_queue = Queues.FIFO(name="BarsQueue", contents=symbols, capacity=None)
+    bars_queue = Queues.FIFO(name="BarsQueue", values=symbols, capacity=None)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     with YahooDriver(name="HistoryReader") as history_reader:
         history_parameters = dict(reader=history_reader, source=bars_queue, saving={bars_file: "w"})
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     warnings.filterwarnings("ignore")
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:2]
-        sysSymbols = [Variables.Querys.SYMBOL(ticker) for ticker in sysTickers]
+        sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=60)).date()])
     sysParameters = dict()
     main(symbols=sysSymbols, dates=sysDates, parameters=sysParameters)

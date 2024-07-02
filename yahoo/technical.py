@@ -18,9 +18,9 @@ HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables
+from finance.variables import Variables, Symbol
 from finance.technicals import TechnicalCalculator, TechnicalFiles
-from support.files import Loader, Saver, Directory, FileTypes, FileTimings
+from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread
 
 __version__ = "1.0.0"
@@ -30,12 +30,11 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolLoader(Loader, query=Variables.Querys.SYMBOL): pass
+class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, function=Symbol.fromstr): pass
 class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
-class SymbolDirectory(Directory, query=Variables.Querys.SYMBOL): pass
 
 
-def technical(*args, loading, saving, directory, parameters={}, **kwargs):
+def technical(*args, directory, loading, saving, parameters={}, **kwargs):
     technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory)
     technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
     technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
@@ -49,8 +48,7 @@ def main(*args, **kwargs):
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    bars_directory = SymbolDirectory(name="BarsDirectory", repository=HISTORY, variable=Variables.Technicals.BARS)
-    technical_parameters = dict(loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"}, directory=bars_directory)
+    technical_parameters = dict(directory=bars_file, loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"})
     technical_thread = technical(*args, **technical_parameters, **kwargs)
     technical_thread.start()
     technical_thread.join()

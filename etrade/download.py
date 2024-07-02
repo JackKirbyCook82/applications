@@ -25,7 +25,7 @@ if ROOT not in sys.path:
 
 from etrade.market import ETradeContractDownloader, ETradeMarketDownloader
 from finance.securities import SecurityFiles
-from finance.variables import DateRange, Variables
+from finance.variables import Variables, DateRange, Symbol
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.files import Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, Requeuer, Queues
@@ -73,7 +73,7 @@ def security(*args, reader, source, saving, parameters={}, **kwargs):
 
 
 def main(*args, apikey, apicode, symbols=[], **kwargs):
-    contract_queue = Queues.FIFO(name="ContractQueue", contents=list(symbols), capacity=None)
+    contract_queue = Queues.FIFO(name="ContractQueue", values=list(symbols), capacity=None)
     security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=apikey, apicode=apicode)
@@ -96,7 +96,7 @@ if __name__ == "__main__":
         sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:2]
-        sysSymbols = [Variables.Querys.SYMBOL(ticker) for ticker in sysTickers]
+        sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
     sysParameters = dict()
     main(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, expires=sysExpires, parameters=sysParameters)
