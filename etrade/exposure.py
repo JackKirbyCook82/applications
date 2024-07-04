@@ -29,6 +29,7 @@ from finance.holdings import HoldingFiles
 from finance.exposures import ExposureCalculator, ExposureFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread
+from support.filtering import Criterion
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -61,11 +62,11 @@ def security(*args, directory, loading, saving, current, parameters={}, **kwargs
     return security_thread
 
 
-def valuation(*args, directory, loading, saving, parameters={}, **kwargs):
+def valuation(*args, directory, loading, saving, parameters={}, criterion={}, **kwargs):
     security_loader = ContractLoader(name="PortfolioSecurityLoader", source=loading, directory=directory)
-    security_filter = SecurityFilter(name="PortfolioSecurityFilter")
+    security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator")
-    valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator")
+    valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", criterion=criterion["valuation"])
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter")
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
     valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver
@@ -80,9 +81,12 @@ def main(*args, **kwargs):
     exposure_file = ExposureFiles.Exposure(name="ExposureFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     option_file = SecurityFiles.Option(name="OptionFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r"}, saving={exposure_file: "w"})
-    security_parameters = dict(directory=exposure_file, loading={exposure_file: "r", statistic_file: "r"}, saving={option_file: "w"})
-    valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"})
+    security_criterion = {Criterion.FLOOR: {"size": 10}}
+    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    criterion = dict(security=security_criterion, valuation=valuation_criterion)
+    exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r"}, saving={exposure_file: "w"}, criterion=criterion)
+    security_parameters = dict(directory=exposure_file, loading={exposure_file: "r", statistic_file: "r"}, saving={option_file: "w"}, criterion=criterion)
+    valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion)
     exposure_thread = exposure(*args, **exposure_parameters, **kwargs)
     security_thread = security(*args, **security_parameters, **kwargs)
     valuation_thread = valuation(*args, **valuation_parameters, **kwargs)
