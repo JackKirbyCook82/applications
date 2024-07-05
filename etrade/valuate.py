@@ -41,8 +41,8 @@ def valuation(*args, directory, loading, saving, parameters={}, criterion={}, **
     security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator")
-    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", criterion=criterion["valuation"])
-    valuation_filter = ValuationFilter(name="MarketValuationFilter")
+    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
     valuation_saver = ContractSaver(name="MarketValuationSaver", destination=saving)
     valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver
     valuation_thread = SideThread(valuation_pipeline, name="MarketValuationThread")

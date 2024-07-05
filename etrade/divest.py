@@ -42,7 +42,7 @@ class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 def portfolio(*args, directory, loading, destination, parameters={}, criterion={}, functions={}, **kwargs):
     valuation_loader = ContractLoader(name="PortfolioValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=destination, **functions)
+    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=destination, valuation=Variables.Valuations.ARBITRAGE, capacity=None, **functions)
     portfolio_pipeline = valuation_loader + valuation_filter + divestiture_writer
     portfolio_thread = SideThread(portfolio_pipeline, name="PortfolioValuationThread")
     portfolio_thread.setup(**parameters)

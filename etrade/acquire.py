@@ -42,7 +42,7 @@ class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 def market(*args, directory, loading, destination, parameters={}, criterion={}, functions={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
-    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination, **functions)
+    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination, valuation=Variables.Valuations.ARBITRAGE, capacity=None, **functions)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
     market_thread.setup(**parameters)
