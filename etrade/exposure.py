@@ -23,11 +23,11 @@ if ROOT not in sys.path:
 
 from finance.variables import Variables, Contract
 from finance.technicals import TechnicalFiles
-from finance.securities import SecurityCalculator, SecurityFilter, SecurityFiles
+from finance.securities import SecurityCalculator, SecurityFilter
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
 from finance.holdings import HoldingFiles
-from finance.exposures import ExposureCalculator, ExposureFiles
+from finance.exposures import ExposureCalculator, StabilityCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread
 from support.filtering import Criterion
@@ -43,61 +43,34 @@ class ContractLoader(Loader, query=Variables.Querys.CONTRACT, function=Contract.
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
-def exposure(*args, directory, loading, saving, parameters={}, **kwargs):
+def exposure(*args, directory, loading, saving, current, parameters={}, criterion={}, functions={}, **kwargs):
     holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory)
     exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator")
-    exposure_saver = ContractSaver(name="PortfolioExposureSaver", destination=saving)
-    exposure_pipeline = holding_loader + exposure_calculator + exposure_saver
-    exposure_thread = SideThread(exposure_pipeline, name="PortfolioExposureThread")
-    exposure_thread.setup(**parameters)
-    return exposure_thread
-
-
-def security(*args, directory, loading, saving, current, parameters={}, functions={}, **kwargs):
-    exposure_loader = ContractLoader(name="PortfolioExposureLoader", source=loading, directory=directory)
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
-    security_saver = ContractSaver(name="PortfolioSecuritySaver", destination=saving)
-    security_pipeline = exposure_loader + security_calculator + security_saver
-    security_thread = SideThread(security_pipeline, name="PortfolioSecurityThread")
-    security_thread.setup(current=current, **parameters)
-    return security_thread
-
-
-def valuation(*args, directory, loading, saving, parameters={}, criterion={}, **kwargs):
-    security_loader = ContractLoader(name="PortfolioSecurityLoader", source=loading, directory=directory)
     security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator")
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
+    stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
-    valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver
-    valuation_thread = SideThread(valuation_pipeline, name="PortfolioValuationThread")
-    valuation_thread.setup(**parameters)
-    return valuation_thread
+    exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + stability_calculator + valuation_saver
+    exposure_thread = SideThread(exposure_pipeline, name="PortfolioExposureThread")
+    exposure_thread.setup(current=current, **parameters)
+    return exposure_thread
 
 
 def main(*args, **kwargs):
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    exposure_file = ExposureFiles.Exposure(name="ExposureFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    option_file = SecurityFiles.Option(name="OptionFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_criterion = {Criterion.FLOOR: {"size": 10}}
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
     functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN)
-    exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r"}, saving={exposure_file: "w"}, criterion=criterion, functions=functions)
-    security_parameters = dict(directory=exposure_file, loading={exposure_file: "r", statistic_file: "r"}, saving={option_file: "w"}, criterion=criterion, functions=functions)
-    valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions)
+    exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions)
     exposure_thread = exposure(*args, **exposure_parameters, **kwargs)
-    security_thread = security(*args, **security_parameters, **kwargs)
-    valuation_thread = valuation(*args, **valuation_parameters, **kwargs)
     exposure_thread.start()
     exposure_thread.join()
-    security_thread.start()
-    security_thread.join()
-    valuation_thread.start()
-    valuation_thread.join()
 
 
 if __name__ == "__main__":
