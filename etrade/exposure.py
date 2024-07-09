@@ -63,8 +63,8 @@ def main(*args, **kwargs):
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    security_criterion = {Criterion.FLOOR: {"size": 10}}
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    security_criterion = {Criterion.FLOOR: {"size": 0}}
+    valuation_criterion = {Criterion.FLOOR: {"apy": -0.95, "size": 0}, Criterion.NULL: ["apy", "size"]}
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
     functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN)
     exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions)
