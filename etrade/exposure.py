@@ -74,6 +74,13 @@ def main(*args, **kwargs):
 
 
 if __name__ == "__main__":
+    import pandas as pd
+    import xarray as xr
+    pd.set_option("display.max_columns", 100)
+    pd.set_option("display.width", 250)
+    xr.set_options(display_width=250)
+    np.set_printoptions(linewidth=250)
+
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     sysCurrent = Datetime(year=2024, month=6, day=21)
