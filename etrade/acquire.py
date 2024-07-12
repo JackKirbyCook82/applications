@@ -67,7 +67,6 @@ def main(*args, **kwargs):
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
-
     market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, destination=acquisitions_table, criterion=criterion, functions=functions)
     acquisition_parameters = dict(source=acquisitions_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions)
     market_thread = market(*args, **market_parameters, **kwargs)

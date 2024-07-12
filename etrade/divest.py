@@ -61,7 +61,7 @@ def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     divestiture_table = HoldingTable(name="DivestitureTable")
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0375, "size": 10}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
