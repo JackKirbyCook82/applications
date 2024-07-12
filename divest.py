@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jun 13 2024
-@name:   ETrade Trading Platform Divestitures
+@name:   Trading Platform Divestitures
 @author: Jack Kirby Cook
 
 """
@@ -14,8 +14,7 @@ import warnings
 import numpy as np
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
-PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
-ROOT = os.path.abspath(os.path.join(PROJECT, os.pardir))
+ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)

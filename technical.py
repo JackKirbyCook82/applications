@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jul 12 2023
-@name:   Yahoo Trading Platform Technicals
+@name:   Trading Platform Technicals
 @author: Jack Kirby Cook
 
 """
@@ -12,8 +12,7 @@ import logging
 import warnings
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
-PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
-ROOT = os.path.abspath(os.path.join(PROJECT, os.pardir))
+ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)

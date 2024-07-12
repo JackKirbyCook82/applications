@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jul 12 2023
-@name:   ETrade Trading Platform Acquisitions
+@name:   Trading Platform Acquisitions
 @author: Jack Kirby Cook
 
 """
@@ -14,8 +14,7 @@ import warnings
 import numpy as np
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
-PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
-ROOT = os.path.abspath(os.path.join(PROJECT, os.pardir))
+ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 MARKET = os.path.join(ROOT, "repository", "market")
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:

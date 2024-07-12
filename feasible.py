@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jul 12 2023
-@name:   ETrade Trading Platform Exposures
+@name:   Trading Platform Exposures
 @author: Jack Kirby Cook
 
 """
@@ -14,8 +14,7 @@ import numpy as np
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
-PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
-ROOT = os.path.abspath(os.path.join(PROJECT, os.pardir))
+ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:

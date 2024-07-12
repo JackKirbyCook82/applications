@@ -15,8 +15,7 @@ from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
-PROJECT = os.path.abspath(os.path.join(MAIN, os.pardir))
-ROOT = os.path.abspath(os.path.join(PROJECT, os.pardir))
+ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 MARKET = os.path.join(ROOT, "repository", "market")
 TICKERS = os.path.join(ROOT, "applications", "tickers.txt")
 API = os.path.join(ROOT, "applications", "api.txt")
