@@ -23,7 +23,6 @@ if ROOT not in sys.path:
 from finance.variables import Variables, Contract
 from finance.valuations import ValuationFilter, ValuationFiles
 from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
-from finance.exposures import ExposureFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
 from support.filtering import Criterion
@@ -60,7 +59,6 @@ def divestiture(*args, source, saving, parameters={}, **kwargs):
 
 def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    exposure_file = ExposureFiles.Exposure(name="ExposureFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     divestiture_table = HoldingTable(name="DivestitureTable")
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
@@ -68,7 +66,7 @@ def main(*args, **kwargs):
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
-    portfolio_parameters = dict(directory=arbitrage_file, loading={exposure_file: "r", arbitrage_file: "r"}, destination=divestiture_table, criterion=criterion, functions=functions)
+    portfolio_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, destination=divestiture_table, criterion=criterion, functions=functions)
     divestiture_parameters = dict(source=divestiture_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions)
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
@@ -76,6 +74,7 @@ def main(*args, **kwargs):
     portfolio_thread.join()
     divestiture_thread.start()
     while True:
+        print(divestiture_table)
         if not bool(divestiture_table):
             break
         divestiture_table[0:25, "status"] = Variables.Status.PURCHASED

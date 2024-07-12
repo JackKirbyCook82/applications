@@ -27,7 +27,7 @@ from finance.securities import SecurityCalculator, SecurityFilter
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
 from finance.holdings import HoldingFiles
-from finance.exposures import ExposureCalculator, StabilityCalculator
+from finance.feasibility import FeasibilityCalculator, ExposureCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread
 from support.filtering import Criterion
@@ -51,9 +51,9 @@ def exposure(*args, directory, loading, saving, current, parameters={}, criterio
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator")
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
-    exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + stability_calculator + valuation_saver
+    exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + portfolio_calculator + valuation_saver
     exposure_thread = SideThread(exposure_pipeline, name="PortfolioExposureThread")
     exposure_thread.setup(current=current, **parameters)
     return exposure_thread
@@ -63,8 +63,8 @@ def main(*args, **kwargs):
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    security_criterion = {Criterion.FLOOR: {"size": 0}}
-    valuation_criterion = {Criterion.FLOOR: {"apy": -0.95, "size": 0}, Criterion.NULL: ["apy", "size"]}
+    security_criterion = {Criterion.FLOOR: {"size": 10}}
+    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0, "size": 10}, Criterion.NULL: ["apy", "size"]}
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
     functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN)
     exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions)
@@ -74,17 +74,10 @@ def main(*args, **kwargs):
 
 
 if __name__ == "__main__":
-    import pandas as pd
-    import xarray as xr
-    pd.set_option("display.max_columns", 100)
-    pd.set_option("display.width", 250)
-    xr.set_options(display_width=250)
-    np.set_printoptions(linewidth=250)
-
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     sysCurrent = Datetime(year=2024, month=6, day=21)
-    sysParameters = dict(discount=0.0, fees=0.0)
+    sysParameters = dict(discount=0.0, fees=0.0, factor=0.1)
     main(current=sysCurrent, parameters=sysParameters)
 
 
