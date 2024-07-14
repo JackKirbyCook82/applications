@@ -56,7 +56,7 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
 
 
 def portfolio(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
-    holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory, wait=0)
+    holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory, wait=10)
     exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator")
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
     security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
