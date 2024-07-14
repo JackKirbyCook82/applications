@@ -41,7 +41,7 @@ class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 def market(*args, directory, loading, destination, parameters={}, criterion={}, functions={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
-    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination, valuation=Variables.Valuations.ARBITRAGE, capacity=None, **functions)
+    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=destination, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
     market_thread.setup(**parameters)
@@ -61,7 +61,7 @@ def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisitions_table = HoldingTable(name="AcquisitionTable")
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0375, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0035, "size": 10}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
@@ -74,7 +74,6 @@ def main(*args, **kwargs):
     market_thread.join()
     acquisition_thread.start()
     while True:
-        print(acquisitions_table)
         if not bool(acquisitions_table):
             break
         acquisitions_table[0:25, "status"] = Variables.Status.PURCHASED

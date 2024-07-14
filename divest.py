@@ -40,7 +40,7 @@ class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 def portfolio(*args, directory, loading, destination, parameters={}, criterion={}, functions={}, **kwargs):
     valuation_loader = ContractLoader(name="PortfolioValuationLoader", source=loading, directory=directory)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=destination, valuation=Variables.Valuations.ARBITRAGE, capacity=None, **functions)
+    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=destination, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = valuation_loader + valuation_filter + divestiture_writer
     portfolio_thread = SideThread(portfolio_pipeline, name="PortfolioValuationThread")
     portfolio_thread.setup(**parameters)
@@ -60,7 +60,7 @@ def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     divestiture_table = HoldingTable(name="DivestitureTable")
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0375, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {"apy": 0.0035, "size": 10}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
@@ -73,7 +73,6 @@ def main(*args, **kwargs):
     portfolio_thread.join()
     divestiture_thread.start()
     while True:
-        print(divestiture_table)
         if not bool(divestiture_table):
             break
         divestiture_table[0:25, "status"] = Variables.Status.PURCHASED

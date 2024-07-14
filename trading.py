@@ -28,7 +28,7 @@ from finance.valuations import ValuationCalculator, ValuationFilter
 from finance.feasibility import FeasibilityCalculator, ExposureCalculator
 from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
 from support.files import Loader, Saver, FileTypes, FileTimings
-from support.synchronize import Breaker, SideThread, CycleThread
+from support.synchronize import SideThread, CycleThread
 from support.filtering import Criterion
 
 __version__ = "1.0.0"
@@ -48,7 +48,7 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
     strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator")
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
-    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, capacity=None, **functions)
+    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketThread")
     market_thread.setup(**parameters)
@@ -64,7 +64,7 @@ def portfolio(*args, directory, loading, table, parameters={}, criterion={}, fun
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
     portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, capacity=None, **functions)
+    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + portfolio_calculator + divestiture_writer
     portfolio_thread = CycleThread(portfolio_pipeline, name="PortfolioThread", wait=10)
     portfolio_thread.setup(**parameters)
@@ -115,12 +115,9 @@ def main(*args, arguments, parameters, **kwargs):
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
     threads = [market_thread, portfolio_thread, acquisition_thread, divestiture_thread]
 
-    trading_parameters = [market_thread, acquisition_table, divestiture_table]
-    trading_breaker = Breaker(trading_parameters)
-
     for thread in iter(threads):
         thread.start()
-    while bool(trading_breaker):
+    while True:
         print(acquisition_table)
         print(divestiture_table)
         time.sleep(10)
@@ -134,7 +131,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     current = Datetime(year=2024, month=7, day=12)
-    sysArguments = dict(apy=0.01, size=10)
+    sysArguments = dict(apy=0.0035, size=10)
     sysParameters = dict(current=current, discount=0.0, fees=0.0, factor=0.1)
     main(arguments=sysArguments, parameters=sysParameters)
 
