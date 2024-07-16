@@ -44,13 +44,13 @@ class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 def exposure(*args, directory, loading, saving, current, parameters={}, criterion={}, functions={}, **kwargs):
     holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory)
-    exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator")
+    exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator", **functions)
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
-    security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
-    strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator")
-    valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"], **functions)
+    strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator", **functions)
+    valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
     exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + portfolio_calculator + valuation_saver
     exposure_thread = SideThread(exposure_pipeline, name="PortfolioExposureThread")
@@ -64,8 +64,9 @@ def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_criterion = {Criterion.FLOOR: {"size": 10}}
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0035, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
-    functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN)
+    functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN, factor=factor_function)
     exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions)
     exposure_thread = exposure(*args, **exposure_parameters, **kwargs)
     exposure_thread.start()

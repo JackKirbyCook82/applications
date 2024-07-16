@@ -45,8 +45,8 @@ class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
     security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory, wait=10)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
-    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator")
-    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
+    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
     acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
@@ -57,13 +57,13 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
 
 def portfolio(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
     holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory, wait=10)
-    exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator")
+    exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator", **functions)
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
     security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
-    strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator")
-    valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator", **functions)
+    valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + portfolio_calculator + divestiture_writer
     portfolio_thread = CycleThread(portfolio_pipeline, name="PortfolioThread", wait=10)
@@ -102,7 +102,8 @@ def main(*args, arguments, parameters, **kwargs):
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     size_function = lambda cols: np.int32(arguments["size"])
-    functions = dict(liquidity=liquidity_function, priority=priority_function, size=size_function)
+    factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
+    functions = dict(liquidity=liquidity_function, priority=priority_function, size=size_function, factor=factor_function)
 
     market_parameters = dict(directory=option_file, loading={option_file: "r"}, criterion=criterion, functions=functions, parameters=parameters)
     portfolio_parameters = dict(directory=holding_file, loading={holding_file: "r"}, criterion=criterion, functions=functions, parameters=parameters)
@@ -118,8 +119,8 @@ def main(*args, arguments, parameters, **kwargs):
     for thread in iter(threads):
         thread.start()
     while True:
-        print(acquisition_table)
-        print(divestiture_table)
+        print(repr(acquisition_table))
+        print(repr(divestiture_table))
         time.sleep(10)
     for thread in iter(threads):
         thread.cease()

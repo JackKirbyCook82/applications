@@ -36,11 +36,11 @@ class ContractLoader(Loader, query=Variables.Querys.CONTRACT, function=Contract.
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
-def valuation(*args, directory, loading, saving, parameters={}, criterion={}, **kwargs):
+def valuation(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):
     security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
-    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator")
-    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
+    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
     valuation_saver = ContractSaver(name="MarketValuationSaver", destination=saving)
     valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver

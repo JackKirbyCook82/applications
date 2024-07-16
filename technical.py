@@ -33,8 +33,8 @@ class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, function=Symbol.fromst
 class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
 
 
-def technical(*args, directory, loading, saving, parameters={}, **kwargs):
-    technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory)
+def technical(*args, directory, loading, saving, parameters={}, functions={}, **kwargs):
+    technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory, **functions)
     technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
     technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
     technical_pipeline = technical_loader + technical_calculator + technical_saver

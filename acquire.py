@@ -60,23 +60,24 @@ def acquisition(*args, source, saving, parameters={}, **kwargs):
 def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    acquisitions_table = HoldingTable(name="AcquisitionTable")
+    acquisition_table = HoldingTable(name="AcquisitionTable")
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.0035, "size": 10}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
-    market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, destination=acquisitions_table, criterion=criterion, functions=functions)
-    acquisition_parameters = dict(source=acquisitions_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions)
+    market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, destination=acquisition_table, criterion=criterion, functions=functions)
+    acquisition_parameters = dict(source=acquisition_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions)
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
     market_thread.start()
     market_thread.join()
     acquisition_thread.start()
     while True:
-        if not bool(acquisitions_table):
+        print(repr(acquisition_table))
+        if not bool(acquisition_table):
             break
-        acquisitions_table[0:25, "status"] = Variables.Status.PURCHASED
+        acquisition_table[0:25, "status"] = Variables.Status.PURCHASED
         time.sleep(5)
     acquisition_thread.cease()
     acquisition_thread.join()
