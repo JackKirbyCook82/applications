@@ -114,9 +114,11 @@ def main(*args, arguments, parameters, **kwargs):
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
-    threads = [market_thread, portfolio_thread, acquisition_thread, divestiture_thread]
+    threads = [portfolio_thread, acquisition_thread, divestiture_thread]
 
     logger = logging.getLogger(__name__)
+    market_thread.start()
+    market_thread.join()
     for thread in iter(threads):
         thread.start()
     while True:
