@@ -73,7 +73,7 @@ def main(*args, **kwargs):
     portfolio_thread.join()
     divestiture_thread.start()
     while True:
-        print(repr(divestiture_table))
+        print(str(divestiture_table))
         if not bool(divestiture_table):
             break
         divestiture_table[0:25, "status"] = Variables.Status.PURCHASED

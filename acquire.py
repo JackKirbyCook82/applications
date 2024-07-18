@@ -74,7 +74,7 @@ def main(*args, **kwargs):
     market_thread.join()
     acquisition_thread.start()
     while True:
-        print(repr(acquisition_table))
+        print(str(acquisition_table))
         if not bool(acquisition_table):
             break
         acquisition_table[0:25, "status"] = Variables.Status.PURCHASED
