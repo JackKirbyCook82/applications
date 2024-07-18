@@ -99,10 +99,10 @@ def main(*args, arguments, parameters, **kwargs):
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}, Criterion.NULL: ["size"]}
     criterion = dict(valuation=valuation_criterion, security=security_criterion)
 
+    factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     size_function = lambda cols: np.int32(arguments["size"])
-    factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
     functions = dict(liquidity=liquidity_function, priority=priority_function, size=size_function, factor=factor_function)
 
     market_parameters = dict(directory=option_file, loading={option_file: "r"}, criterion=criterion, functions=functions, parameters=parameters)
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     current = Datetime(year=2024, month=7, day=12)
-    sysArguments = dict(apy=0.0035, size=10)
+    sysArguments = dict(apy=0.05, size=10)
     sysParameters = dict(current=current, discount=0.0, fees=0.0, factor=0.1)
     main(arguments=sysArguments, parameters=sysParameters)
 
