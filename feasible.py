@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jul 12 2023
-@name:   Trading Platform Exposures
+@name:   Trading Platform Feasibility
 @author: Jack Kirby Cook
 
 """
