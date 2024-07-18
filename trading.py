@@ -116,11 +116,12 @@ def main(*args, arguments, parameters, **kwargs):
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
     threads = [market_thread, portfolio_thread, acquisition_thread, divestiture_thread]
 
+    logger = logging.getLogger(__name__)
     for thread in iter(threads):
         thread.start()
     while True:
-        print(repr(acquisition_table))
-        print(repr(divestiture_table))
+        logger.info(f"Acquisitions: {repr(acquisition_table)}")
+        logger.info(f"Divestitures: {repr(divestiture_table)}")
         time.sleep(10)
     for thread in iter(threads):
         thread.cease()
@@ -131,9 +132,9 @@ def main(*args, arguments, parameters, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    current = Datetime(year=2024, month=7, day=12)
-    sysArguments = dict(apy=0.05, size=10)
-    sysParameters = dict(current=current, discount=0.0, fees=0.0, factor=0.1)
+    current = Datetime(year=2024, month=7, day=18)
+    sysArguments = dict(apy=0.035, size=10)
+    sysParameters = dict(current=current, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
 
