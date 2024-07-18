@@ -66,7 +66,7 @@ if __name__ == "__main__":
     logging.getLogger("seleniumwire").setLevel(logging.ERROR)
     warnings.filterwarnings("ignore")
     with open(TICKERS, "r") as tickerfile:
-        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:2]
+        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=60)).date()])
     sysParameters = dict()
