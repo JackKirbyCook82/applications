@@ -135,7 +135,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.035, size=10)
+    sysArguments = dict(apy=0.01, size=10)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
