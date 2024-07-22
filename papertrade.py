@@ -19,8 +19,9 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from support.synchronize import MainThread
 from etrade.window import PaperTradeApplication
+from support.synchronize import MainThread
+from finance.holdings import HoldingTable
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -29,15 +30,17 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def papertrade(*args, parameters={}, **kwargs):
-    papertrade_application = PaperTradeApplication(name="PaperTradeApplication")
+def papertrade(*args, acquisitions, divestitures, parameters={}, **kwargs):
+    papertrade_application = PaperTradeApplication(acquisitions=acquisitions, divestitures=divestitures, name="PaperTradeApplication")
     papertrade_thread = MainThread(papertrade_application, name="PaperTradeThread")
     papertrade_thread.setup(**parameters)
     return papertrade_thread
 
 
 def main(*args, arguments, parameters, **kwargs):
-    papertrade_parameters = dict(parameters=parameters)
+    acquisition_table = HoldingTable(name="AcquisitionTable")
+    divestiture_table = HoldingTable(name="DivestitureTable")
+    papertrade_parameters = dict(acquisitions=acquisition_table, divestitures=divestiture_table, parameters=parameters)
     papertrade_thread = papertrade(*args, **papertrade_parameters, **kwargs)
     papertrade_thread.start()
     papertrade_thread.run()
