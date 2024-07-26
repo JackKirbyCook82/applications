@@ -42,7 +42,6 @@ def main(*args, arguments, parameters, **kwargs):
     divestiture_table = HoldingTable(name="DivestitureTable")
     papertrade_parameters = dict(acquisitions=acquisition_table, divestitures=divestiture_table, parameters=parameters)
     papertrade_thread = papertrade(*args, **papertrade_parameters, **kwargs)
-    papertrade_thread.start()
     papertrade_thread.run()
 
 
