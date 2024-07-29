@@ -120,8 +120,8 @@ def main(*args, arguments, parameters, **kwargs):
     threads = [market_thread, portfolio_thread, acquisition_thread, divestiture_thread]
 
     logger = logging.getLogger(__name__)
-    accept = (lambda table: table["liquidity"] >= 2, ["status"], Variables.Status.ACCEPTED)
-    reject = (lambda table: table["liquidity"] <= 5, ["status"], Variables.Status.REJECTED)
+    accept = (lambda table: table["liquidity"] >= 5, ["status"], Variables.Status.ACCEPTED)
+    reject = (lambda table: table["liquidity"] <= 2, ["status"], Variables.Status.REJECTED)
 
     for thread in iter(threads):
         thread.start()
