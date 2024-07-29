@@ -52,11 +52,15 @@ def valuation(*args, directory, loading, saving, parameters={}, criterion={}, fu
 def main(*args, **kwargs):
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+
+    security_criterion = {Criterion.FLOOR: {"size": 10, "volume": 100, "interest": 100}, Criterion.NULL: ["size", "volume", "interest"]}
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.00035, "size": 10}, Criterion.NULL: ["apy", "size"]}
-    security_criterion = {Criterion.FLOOR: {"size": 10}}
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
+
     valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion)
+
     valuation_thread = valuation(*args, **valuation_parameters, **kwargs)
+
     valuation_thread.start()
     valuation_thread.join()
 

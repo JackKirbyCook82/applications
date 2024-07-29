@@ -17,11 +17,13 @@ from datetime import datetime as Datetime
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 MARKET = os.path.join(ROOT, "repository", "market")
+HISTORY = os.path.join(ROOT, "repository", "history")
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from finance.variables import Variables, Contract
+from finance.technicals import TechnicalFiles
 from finance.securities import SecurityCalculator, SecurityFilter, SecurityFiles
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
@@ -72,7 +74,7 @@ def portfolio(*args, directory, loading, table, parameters={}, criterion={}, fun
 
 
 def acquisition(*args, table, saving, parameters={}, **kwargs):
-    acquisition_reader = HoldingReader(name="AcquisitionReader", source=table)
+    acquisition_reader = HoldingReader(name="AcquisitionReader", source=table, valuation=Variables.Valuations.ARBITRAGE)
     acquisition_saver = ContractSaver(name="AcquisitionSaver", destination=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
     acquisition_thread = CycleThread(acquisition_pipeline, name="AcquisitionThread", wait=5)
@@ -81,7 +83,7 @@ def acquisition(*args, table, saving, parameters={}, **kwargs):
 
 
 def divestiture(*args, table, saving, parameters={}, **kwargs):
-    divestiture_reader = HoldingReader(name="DivestitureReader", source=table)
+    divestiture_reader = HoldingReader(name="DivestitureReader", source=table, valuation=Variables.Valuations.ARBITRAGE)
     divestiture_saver = ContractSaver(name="DivestitureSaver", destination=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
     divestiture_thread = CycleThread(divestiture_pipeline, name="DivestitureThread", wait=5)
@@ -90,6 +92,7 @@ def divestiture(*args, table, saving, parameters={}, **kwargs):
 
 
 def main(*args, arguments, parameters, **kwargs):
+    statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holding_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = HoldingTable(name="AcquisitionTable")
@@ -105,8 +108,8 @@ def main(*args, arguments, parameters, **kwargs):
     size_function = lambda cols: np.int32(arguments["size"])
     functions = dict(liquidity=liquidity_function, priority=priority_function, size=size_function, factor=factor_function)
 
-    market_parameters = dict(directory=option_file, loading={option_file: "r"}, criterion=criterion, functions=functions, parameters=parameters)
-    portfolio_parameters = dict(directory=holding_file, loading={holding_file: "r"}, criterion=criterion, functions=functions, parameters=parameters)
+    market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
+    portfolio_parameters = dict(directory=holding_file, loading={holding_file: "r", statistic_file: "r"}, table=divestiture_table, criterion=criterion, functions=functions, parameters=parameters)
     acquisition_parameters = dict(table=acquisition_table, saving={holding_file: "a"}, parameters=parameters)
     divestiture_parameters = dict(table=divestiture_table, saving={holding_file: "a"}, parameters=parameters)
 
@@ -114,17 +117,23 @@ def main(*args, arguments, parameters, **kwargs):
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
-    threads = [portfolio_thread, acquisition_thread, divestiture_thread]
+    threads = [market_thread, portfolio_thread, acquisition_thread, divestiture_thread]
 
     logger = logging.getLogger(__name__)
-    market_thread.start()
-    market_thread.join()
+    accept = (lambda table: table["liquidity"] >= 2, ["status"], Variables.Status.ACCEPTED)
+    reject = (lambda table: table["liquidity"] <= 5, ["status"], Variables.Status.REJECTED)
+
     for thread in iter(threads):
         thread.start()
     while True:
         logger.info(f"Acquisitions: {repr(acquisition_table)}")
         logger.info(f"Divestitures: {repr(divestiture_table)}")
-        time.sleep(10)
+        print("\n".join(["-"*250, str(acquisition_table), "-"*250, str(divestiture_table), "-"*250]))
+        time.sleep(30)
+        acquisition_table.change(*accept)
+        acquisition_table.change(*reject)
+        divestiture_table.change(*accept)
+        divestiture_table.change(*reject)
     for thread in iter(threads):
         thread.cease()
     for thread in reversed(threads):
@@ -135,7 +144,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.01, size=10)
+    sysArguments = dict(apy=0.00035, size=10)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 

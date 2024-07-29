@@ -10,7 +10,6 @@ import os
 import sys
 import logging
 import warnings
-import PySimpleGUI as gui
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 
@@ -76,11 +75,14 @@ def main(*args, apikey, apicode, symbols=[], **kwargs):
     security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=apikey, apicode=apicode)
+
     with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as security_reader:
         contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue)
-        contract_thread = contracts(*args, **contract_parameters, **kwargs)
         security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"})
+
+        contract_thread = contracts(*args, **contract_parameters, **kwargs)
         security_thread = security(*args, **security_parameters, **kwargs)
+
         contract_thread.start()
         contract_thread.join()
         security_thread.start()
@@ -90,7 +92,6 @@ def main(*args, apikey, apicode, symbols=[], **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    gui.theme("DarkGrey11")
     with open(API, "r") as apifile:
         sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
     with open(TICKERS, "r") as tickerfile:
