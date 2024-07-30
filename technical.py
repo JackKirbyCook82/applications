@@ -47,11 +47,8 @@ def main(*args, **kwargs):
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-
     technical_parameters = dict(directory=bars_file, loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"})
-
     technical_thread = technical(*args, **technical_parameters, **kwargs)
-
     technical_thread.start()
     technical_thread.join()
 

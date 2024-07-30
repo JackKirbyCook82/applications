@@ -75,14 +75,11 @@ def main(*args, apikey, apicode, symbols=[], **kwargs):
     security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=apikey, apicode=apicode)
-
     with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as security_reader:
         contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue)
         security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"})
-
         contract_thread = contracts(*args, **contract_parameters, **kwargs)
         security_thread = security(*args, **security_parameters, **kwargs)
-
         contract_thread.start()
         contract_thread.join()
         security_thread.start()
@@ -98,8 +95,7 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
-    sysParameters = dict()
-    main(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, expires=sysExpires, parameters=sysParameters)
+    main(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, expires=sysExpires, parameters={})
 
 
 

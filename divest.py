@@ -60,16 +60,13 @@ def main(*args, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     divestiture_table = HoldingTable(name="DivestitureTable")
-
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.00035, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {"apy": 0.001, "size": 10}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
     criterion = dict(valuation=valuation_criterion)
-
     portfolio_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, table=divestiture_table, criterion=criterion, functions=functions)
     divestiture_parameters = dict(table=divestiture_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions)
-
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
 
@@ -77,7 +74,7 @@ def main(*args, **kwargs):
     portfolio_thread.join()
     divestiture_thread.start()
     while True:
-        print(str(divestiture_table))
+        print(divestiture_table)
         if not bool(divestiture_table):
             break
         divestiture_table[0:25, "status"] = Variables.Status.PURCHASED
@@ -89,8 +86,7 @@ def main(*args, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    sysParameters = dict()
-    main(parameters=sysParameters)
+    main(parameters={})
 
 
 
