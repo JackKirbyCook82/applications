@@ -71,15 +71,13 @@ def main(*args, **kwargs):
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
 
-    market_thread.start()
-    market_thread.join()
     acquisition_thread.start()
-    while True:
+    market_thread.start()
+    while bool(acquisition_thread) or bool(acquisition_table):
         print(acquisition_table)
-        if not bool(acquisition_table):
-            break
         time.sleep(30)
     acquisition_thread.cease()
+    market_thread.join()
     acquisition_thread.join()
 
 

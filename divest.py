@@ -70,16 +70,13 @@ def main(*args, **kwargs):
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
     divestiture_thread = divestiture(*args, **divestiture_parameters, **kwargs)
 
-    portfolio_thread.start()
-    portfolio_thread.join()
     divestiture_thread.start()
-    while True:
+    portfolio_thread.start()
+    while bool(divestiture_thread) or bool(divestiture_table):
         print(divestiture_table)
-        if not bool(divestiture_table):
-            break
-        divestiture_table[0:25, "status"] = Variables.Status.PURCHASED
         time.sleep(30)
     divestiture_thread.cease()
+    portfolio_thread.join()
     divestiture_thread.join()
 
 
