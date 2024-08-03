@@ -55,7 +55,7 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
 
 
 def papertrade(*args, acquisitions, divestitures, parameters={}, **kwargs):
-    papertrade_application = PaperTradeApplication(acquisitions=acquisitions, divestitures=divestitures, name="PaperTradeApplication")
+    papertrade_application = PaperTradeApplication(name="PaperTradeApplication", acquisitions=acquisitions, divestitures=divestitures, wait=30)
     papertrade_thread = MainThread(papertrade_application, name="PaperTradeThread")
     papertrade_thread.setup(**parameters)
     return papertrade_thread
@@ -65,20 +65,16 @@ def main(*args, arguments, parameters, **kwargs):
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = HoldingTable(name="AcquisitionTable")
     divestiture_table = HoldingTable(name="DivestitureTable")
-
     security_criterion = {Criterion.FLOOR: {"size": 10, "volume": 100, "interest": 100}, Criterion.NULL: ["size", "volume", "interest"]}
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.00035, "size": 10}, Criterion.NULL: ["apy", "size"]}
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     criterion = dict(valuation=valuation_criterion, security=security_criterion)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
-
     market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
     papertrade_parameters = dict(acquisitions=acquisition_table, divestitures=divestiture_table, functions=functions, parameters=parameters)
-
     market_thread = market(*args, **market_parameters, **kwargs)
     papertrade_thread = papertrade(*args, **papertrade_parameters, **kwargs)
-
     market_thread.start()
     papertrade_thread.run()
     market_thread.join()
