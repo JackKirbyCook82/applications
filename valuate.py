@@ -32,8 +32,9 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
+formatter = lambda self, *, query, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(query[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=formatter): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=formatter): pass
 
 
 def valuation(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):

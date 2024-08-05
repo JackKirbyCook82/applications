@@ -29,8 +29,9 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, function=Symbol.fromstr): pass
-class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
+formatter = lambda self, *, query, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(query[Variables.Querys.SYMBOL])}[{elapsed:.02f}s]"
+class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Symbol.fromstr, formatter=formatter): pass
+class SymbolSaver(Saver, query=Variables.Querys.SYMBOL, formatter=formatter): pass
 
 
 def technical(*args, directory, loading, saving, parameters={}, functions={}, **kwargs):

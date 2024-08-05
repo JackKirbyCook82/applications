@@ -36,9 +36,10 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+formatter = lambda self, *, query, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(query[Variables.Querys.SYMBOL])}[{elapsed:.02f}s]"
 class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
-class SymbolDequeuer(Dequeuer, query=Variables.Querys.SYMBOL): pass
-class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
+class SymbolDequeuer(Dequeuer, query=Variables.Querys.SYMBOL, formatter=formatter): pass
+class SymbolSaver(Saver, query=Variables.Querys.SYMBOL, formatter=formatter): pass
 
 
 def history(*args, reader, source, saving, dates=[], parameters={}, **kwargs):

@@ -34,8 +34,9 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
+formatter = lambda self, *, query, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(query[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=formatter): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=formatter): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
@@ -64,6 +65,8 @@ def main(*args, **kwargs):
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.001, "size": 10}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
+    rejected_function = lambda dataframe: (dataframe["liquidity"] <= 10)
+    accepted_function = lambda dataframe: (~rejected_function(dataframe)) & ((~rejected_function(dataframe)).cumsum() < 5 + 1)
     criterion = dict(valuation=valuation_criterion)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
     market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions)
@@ -76,6 +79,8 @@ def main(*args, **kwargs):
     while bool(acquisition_thread) or bool(acquisition_table):
         print(acquisition_table)
         time.sleep(30)
+        acquisition_table.change(rejected_function, "status", Variables.Status.REJECTED)
+        acquisition_table.change(accepted_function, "status", Variables.Status.ACCEPTED)
     acquisition_thread.cease()
     market_thread.join()
     acquisition_thread.join()
