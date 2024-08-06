@@ -29,7 +29,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-formatter = lambda self, *, query, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(query[Variables.Querys.SYMBOL])}[{elapsed:.02f}s]"
+formatter = lambda self, *, contents, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(contents[Variables.Querys.SYMBOL])}[{elapsed:.02f}s]"
 class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Symbol.fromstr, formatter=formatter): pass
 class SymbolSaver(Saver, query=Variables.Querys.SYMBOL, formatter=formatter): pass
 
