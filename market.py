@@ -36,7 +36,9 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-formatter = lambda self, *, contents, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(contents[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
+dequeuer_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
+requeuer_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
+saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
 authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
 request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
@@ -45,10 +47,10 @@ base = "https://api.etrade.com"
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-class SymbolDequeuer(Dequeuer, query=Variables.Querys.SYMBOL, formatter=formatter): pass
-class ContractRequeuer(Requeuer, query=Variables.Querys.CONTRACT, formatter=formatter): pass
-class ContractDequeuer(Dequeuer, query=Variables.Querys.CONTRACT, formatter=formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=formatter): pass
+class SymbolDequeuer(Dequeuer, query=Variables.Querys.SYMBOL, formatter=dequeuer_formatter): pass
+class ContractRequeuer(Requeuer, query=Variables.Querys.CONTRACT, formatter=requeuer_formatter): pass
+class ContractDequeuer(Dequeuer, query=Variables.Querys.CONTRACT, formatter=dequeuer_formatter): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=saving_formatter): pass
 
 
 def contracts(*args, reader, source, destination, expires, parameters={}, **kwargs):

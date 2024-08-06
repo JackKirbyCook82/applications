@@ -38,9 +38,10 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-formatter = lambda self, *, contents, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(contents[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=formatter): pass
+loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
+saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=loading_formatter): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=loading_formatter): pass
 
 
 def exposure(*args, directory, loading, saving, current, parameters={}, criterion={}, functions={}, **kwargs):

@@ -32,9 +32,10 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-formatter = lambda self, *, contents, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(contents[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=formatter): pass
+loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
+saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=loading_formatter): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=saving_formatter): pass
 
 
 def valuation(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):
@@ -44,10 +45,6 @@ def valuation(*args, directory, loading, saving, parameters={}, criterion={}, fu
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
     valuation_saver = ContractSaver(name="MarketValuationSaver", destination=saving)
-
-    x = security_loader + security_filter
-    print(x, type(x))
-
     valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver
     valuation_thread = SideThread(valuation_pipeline, name="MarketValuationThread")
     valuation_thread.setup(**parameters)
