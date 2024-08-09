@@ -126,7 +126,9 @@ def main(*args, arguments, parameters, **kwargs):
     logger = logging.getLogger(__name__)
     for thread in iter(threads):
         thread.start()
-    while True:
+    acquiring = lambda: bool(acquisition_thread) or bool(acquisition_table)
+    divesting = lambda: bool(divestiture_thread) or bool(divestiture_table)
+    while acquiring() or divesting():
         logger.info(f"Acquisitions: {repr(acquisition_table)}")
         logger.info(f"Divestitures: {repr(divestiture_table)}")
         time.sleep(30)
@@ -144,7 +146,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.00035, size=10)
+    sysArguments = dict(apy=0.01, size=10)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
