@@ -64,10 +64,10 @@ def main(*args, **kwargs):
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = HoldingTable(name="AcquisitionTable")
     valuation_criterion = {Criterion.FLOOR: {"apy": 0.001, "size": 10}, Criterion.NULL: ["apy", "size"]}
+    accepted_function = lambda dataframe: (~rejected_function(dataframe)) & ((~rejected_function(dataframe)).cumsum() < 5 + 1)
+    rejected_function = lambda dataframe: (dataframe["liquidity"] <= 10)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
-    rejected_function = lambda dataframe: (dataframe["liquidity"] <= 10)
-    accepted_function = lambda dataframe: (~rejected_function(dataframe)) & ((~rejected_function(dataframe)).cumsum() < 5 + 1)
     criterion = dict(valuation=valuation_criterion)
     functions = dict(liquidity=liquidity_function, priority=priority_function)
     market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions)

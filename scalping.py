@@ -104,6 +104,8 @@ def main(*args, arguments, parameters, **kwargs):
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}, Criterion.NULL: ["size"]}
     criterion = dict(valuation=valuation_criterion, security=security_criterion)
 
+    accepted_function = lambda dataframe: (~rejected_function(dataframe)) & ((~rejected_function(dataframe)).cumsum() < 5 + 1)
+    rejected_function = lambda dataframe: (dataframe["liquidity"] <= 10)
     factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
     liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
@@ -122,20 +124,16 @@ def main(*args, arguments, parameters, **kwargs):
     threads = [market_thread, portfolio_thread, acquisition_thread, divestiture_thread]
 
     logger = logging.getLogger(__name__)
-    accept = (lambda table: table["liquidity"] >= 5, ["status"], Variables.Status.ACCEPTED)
-    reject = (lambda table: table["liquidity"] <= 2, ["status"], Variables.Status.REJECTED)
-
     for thread in iter(threads):
         thread.start()
     while True:
         logger.info(f"Acquisitions: {repr(acquisition_table)}")
         logger.info(f"Divestitures: {repr(divestiture_table)}")
-        print("\n".join(["-"*250, str(acquisition_table), "-"*250, str(divestiture_table), "-"*250]))
         time.sleep(30)
-        acquisition_table.change(*accept)
-        acquisition_table.change(*reject)
-        divestiture_table.change(*accept)
-        divestiture_table.change(*reject)
+        acquisition_table.change(rejected_function, "status", Variables.Status.REJECTED)
+        acquisition_table.change(accepted_function, "status", Variables.Status.ACCEPTED)
+        divestiture_table.change(rejected_function, "status", Variables.Status.REJECTED)
+        divestiture_table.change(accepted_function, "status", Variables.Status.ACCEPTED)
     for thread in iter(threads):
         thread.cease()
     for thread in reversed(threads):
