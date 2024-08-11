@@ -44,11 +44,11 @@ class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fr
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=loading_formatter): pass
 
 
-def exposure(*args, directory, loading, saving, current, parameters={}, criterion={}, functions={}, **kwargs):
+def exposure(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):
     holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory)
     exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator", **functions)
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
-    security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"], **functions)
+    security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
@@ -60,16 +60,17 @@ def exposure(*args, directory, loading, saving, current, parameters={}, criterio
     return exposure_thread
 
 
-def main(*args, **kwargs):
+def main(*args, arguments, parameters, **kwargs):
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.01, "size": 10}, Criterion.NULL: ["apy", "size"]}
-    security_criterion = {Criterion.FLOOR: {"size": 10}}
-    factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
-    functions = dict(size=lambda cols: np.int32(10), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN, factor=factor_function)
+
+    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
+    security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}}
+    functions = dict(size=lambda cols: arguments["size"], volume=lambda cols: arguments["volume"], interest=lambda cols: arguments["interest"])
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
-    exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions)
+
+    exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions, parameters=parameters)
     exposure_thread = exposure(*args, **exposure_parameters, **kwargs)
     exposure_thread.start()
     exposure_thread.join()
@@ -78,9 +79,10 @@ def main(*args, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysParameters = dict(discount=0.0, fees=0.0)
-    main(current=sysCurrent, parameters=sysParameters)
+    current = Datetime(year=2024, month=7, day=18)
+    sysArguments = dict(apy=0.50, size=np.int32(10), volume=np.NaN, interest=np.NaN)
+    sysParameters = dict(current=current, discount=0.0, fees=0.0)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

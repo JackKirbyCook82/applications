@@ -53,11 +53,12 @@ def history(*args, reader, source, saving, dates=[], parameters={}, **kwargs):
     return history_thread
 
 
-def main(*args, symbols=[], **kwargs):
-    bars_queue = Queues.FIFO(name="BarsQueue", values=symbols, capacity=None)
+def main(*args, arguments, parameters, **kwargs):
+    bars_queue = Queues.FIFO(name="BarsQueue", values=arguments["symbols"], capacity=None)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+
     with YahooDriver(name="HistoryReader") as history_reader:
-        history_parameters = dict(reader=history_reader, source=bars_queue, saving={bars_file: "w"})
+        history_parameters = dict(reader=history_reader, source=bars_queue, saving={bars_file: "w"}, parameters=parameters)
         history_thread = history(*args, **history_parameters, **kwargs)
         history_thread.start()
         history_thread.join()
@@ -71,7 +72,9 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=60)).date()])
-    main(symbols=sysSymbols, dates=sysDates, parameters={})
+    sysArguments = dict(symbols=sysSymbols)
+    sysParameters = dict(dates=sysDates)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

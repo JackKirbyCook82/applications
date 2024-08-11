@@ -53,13 +53,13 @@ class ContractDequeuer(Dequeuer, query=Variables.Querys.CONTRACT, formatter=cont
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=terminal_formatter): pass
 
 
-def contracts(*args, reader, source, destination, expires, parameters={}, **kwargs):
+def contracts(*args, reader, source, destination, parameters={}, **kwargs):
     contract_dequeuer = SymbolDequeuer(name="MarketContractDequeuer", source=source)
     contract_downloader = ETradeContractDownloader(name="MarketContractDownloader", feed=reader)
     contract_requeuer = ContractRequeuer(name="MarketContractRequeuer", destination=destination)
     contract_pipeline = contract_dequeuer + contract_downloader + contract_requeuer
     contract_thread = SideThread(contract_pipeline, name="MarketContractThread")
-    contract_thread.setup(expires=expires, **parameters)
+    contract_thread.setup(**parameters)
     return contract_thread
 
 
@@ -73,14 +73,15 @@ def security(*args, reader, source, saving, parameters={}, **kwargs):
     return security_thread
 
 
-def main(*args, apikey, apicode, symbols=[], **kwargs):
-    contract_queue = Queues.FIFO(name="ContractQueue", values=list(symbols), capacity=None)
+def main(*args, arguments, parameters, **kwargs):
+    contract_queue = Queues.FIFO(name="ContractQueue", values=arguments["tickers"], capacity=None)
     security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=apikey, apicode=apicode)
+    security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
+
     with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as security_reader:
-        contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue)
-        security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"})
+        contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue, parameters=parameters)
+        security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"}, parameters=parameters)
         contract_thread = contracts(*args, **contract_parameters, **kwargs)
         security_thread = security(*args, **security_parameters, **kwargs)
         contract_thread.start()
@@ -98,7 +99,9 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
-    main(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, expires=sysExpires, parameters={})
+    sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, tickers=sysTickers)
+    sysParameters = dict(expires=sysExpires)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

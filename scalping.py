@@ -102,20 +102,24 @@ def main(*args, arguments, parameters, **kwargs):
 
     valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}, Criterion.NULL: ["size"]}
-    criterion = dict(valuation=valuation_criterion, security=security_criterion)
-
-    accepted_function = lambda dataframe: (~rejected_function(dataframe)) & ((~rejected_function(dataframe)).cumsum() < 5 + 1)
-    rejected_function = lambda dataframe: (dataframe["liquidity"] <= 10)
-    factor_function = lambda count: 0.1 * count * np.sin(count * 2 * np.pi / 10).astype(np.float32)
-    liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
+    factor_function = lambda count: (0.5 * np.sin(count * 2 * np.pi / 5) + 0.05 * count).astype(np.float32) * np.float32(0.0)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    size_function = lambda cols: np.int32(arguments["size"])
-    functions = dict(liquidity=liquidity_function, priority=priority_function, size=size_function, factor=factor_function)
+    functions = dict(size=lambda cols: arguments["size"], volume=lambda cols: arguments["volume"], interest=lambda cols: arguments["interest"])
+    functions = functions | dict(factor=factor_function, priority=priority_function)
+    criterion = dict(security=security_criterion, valuation=valuation_criterion)
 
     market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
     portfolio_parameters = dict(directory=holding_file, loading={holding_file: "r", statistic_file: "r"}, table=divestiture_table, criterion=criterion, functions=functions, parameters=parameters)
     acquisition_parameters = dict(table=acquisition_table, saving={holding_file: "a"}, parameters=parameters)
     divestiture_parameters = dict(table=divestiture_table, saving={holding_file: "a"}, parameters=parameters)
+
+    wrapper_function = lambda function: lambda dataframe: (function(dataframe).cumsum() < arguments["capacity"] + 1) & function(dataframe)
+    abandon_function = lambda dataframe: (dataframe["priority"] < arguments["pursue"])
+    reject_function = lambda dataframe: (dataframe["priority"] >= arguments["pursue"]) & (dataframe["size"] < arguments["accept"])
+    accept_function = lambda dataframe: (dataframe["priority"] >= arguments["pursue"]) & (dataframe["size"] >= arguments["accept"])
+    abandon_function = wrapper_function(abandon_function)
+    reject_function = wrapper_function(reject_function)
+    accept_function = wrapper_function(accept_function)
 
     market_thread = market(*args, **market_parameters, **kwargs)
     portfolio_thread = portfolio(*args, **portfolio_parameters, **kwargs)
@@ -126,16 +130,18 @@ def main(*args, arguments, parameters, **kwargs):
     logger = logging.getLogger(__name__)
     for thread in iter(threads):
         thread.start()
-    acquiring = lambda: bool(acquisition_thread) or bool(acquisition_table)
-    divesting = lambda: bool(divestiture_thread) or bool(divestiture_table)
+    acquiring = lambda: bool(market_thread) or bool(acquisition_table)
+    divesting = lambda: bool(portfolio_thread) or bool(divestiture_table)
     while acquiring() or divesting():
         logger.info(f"Acquisitions: {repr(acquisition_table)}")
         logger.info(f"Divestitures: {repr(divestiture_table)}")
-        time.sleep(30)
-        acquisition_table.change(rejected_function, "status", Variables.Status.REJECTED)
-        acquisition_table.change(accepted_function, "status", Variables.Status.ACCEPTED)
-        divestiture_table.change(rejected_function, "status", Variables.Status.REJECTED)
-        divestiture_table.change(accepted_function, "status", Variables.Status.ACCEPTED)
+        time.sleep(10)
+        acquisition_table.change(abandon_function, "status", Variables.Status.ABANDONED)
+        acquisition_table.change(reject_function, "status", Variables.Status.REJECTED)
+        acquisition_table.change(accept_function, "status", Variables.Status.ACCEPTED)
+        divestiture_table.change(abandon_function, "status", Variables.Status.ABANDONED)
+        divestiture_table.change(reject_function, "status", Variables.Status.REJECTED)
+        divestiture_table.change(accept_function, "status", Variables.Status.ACCEPTED)
     for thread in iter(threads):
         thread.cease()
     for thread in reversed(threads):
@@ -146,7 +152,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.01, size=10)
+    sysArguments = dict(apy=0.15, size=np.int32(10), volume=np.NaN, interest=np.NaN) | dict(pursue=1, accept=20, capacity=5)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 

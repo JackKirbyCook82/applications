@@ -11,7 +11,7 @@ import sys
 import time
 import logging
 import warnings
-import numpy as np
+from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -59,29 +59,38 @@ def acquisition(*args, table, saving, parameters={}, **kwargs):
     return acquisition_thread
 
 
-def main(*args, **kwargs):
+def main(*args, arguments, parameters, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = HoldingTable(name="AcquisitionTable")
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.01, "size": 10}, Criterion.NULL: ["apy", "size"]}
-    accepted_function = lambda dataframe: (~rejected_function(dataframe)) & ((~rejected_function(dataframe)).cumsum() < 5 + 1)
-    rejected_function = lambda dataframe: (dataframe["liquidity"] <= 10)
+
+    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    liquidity_function = lambda cols: np.floor(cols["size"] * 0.1).astype(np.int32)
     criterion = dict(valuation=valuation_criterion)
-    functions = dict(liquidity=liquidity_function, priority=priority_function)
-    market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions)
-    acquisition_parameters = dict(table=acquisition_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions)
+    functions = dict(priority=priority_function)
+
+    market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
+    acquisition_parameters = dict(table=acquisition_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions, parameters=parameters)
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
 
+    wrapper_function = lambda function: lambda dataframe: (function(dataframe).cumsum() < arguments["capacity"] + 1) & function(dataframe)
+    abandon_function = lambda dataframe: (dataframe["priority"] < arguments["pursue"])
+    reject_function = lambda dataframe: (dataframe["priority"] >= arguments["pursue"]) & (dataframe["size"] < arguments["accept"])
+    accept_function = lambda dataframe: (dataframe["priority"] >= arguments["pursue"]) & (dataframe["size"] >= arguments["accept"])
+    abandon_function = wrapper_function(abandon_function)
+    reject_function = wrapper_function(reject_function)
+    accept_function = wrapper_function(accept_function)
+
     acquisition_thread.start()
     market_thread.start()
-    while bool(acquisition_thread) or bool(acquisition_table):
-        print(acquisition_table)
-        time.sleep(30)
-        acquisition_table.change(rejected_function, "status", Variables.Status.REJECTED)
-        acquisition_table.change(accepted_function, "status", Variables.Status.ACCEPTED)
+    while bool(market_thread) or bool(acquisition_table):
+        if bool(acquisition_table):
+            print(acquisition_table)
+        time.sleep(10)
+        acquisition_table.change(abandon_function, "status", Variables.Status.ABANDONED)
+        acquisition_table.change(reject_function, "status", Variables.Status.REJECTED)
+        acquisition_table.change(accept_function, "status", Variables.Status.ACCEPTED)
     acquisition_thread.cease()
     market_thread.join()
     acquisition_thread.join()
@@ -90,7 +99,11 @@ def main(*args, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    main(parameters={})
+    current = Datetime(year=2024, month=7, day=18)
+    sysArguments = dict(apy=0.50, size=10, pursue=1, accept=20, capacity=20)
+    sysParameters = dict(current=current, discount=0.0, fees=0.0)
+    main(arguments=sysArguments, parameters=sysParameters)
+
 
 
 

@@ -10,6 +10,7 @@ import os
 import sys
 import logging
 import warnings
+from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -51,13 +52,15 @@ def valuation(*args, directory, loading, saving, parameters={}, criterion={}, fu
     return valuation_thread
 
 
-def main(*args, **kwargs):
+def main(*args, arguments, parameters, **kwargs):
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    security_criterion = {Criterion.FLOOR: {"size": 10, "volume": 100, "interest": 100}, Criterion.NULL: ["size", "volume", "interest"]}
-    valuation_criterion = {Criterion.FLOOR: {"apy": 0.01, "size": 10}, Criterion.NULL: ["apy", "size"]}
+
+    security_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
+    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
-    valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion)
+
+    valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, parameters=parameters)
     valuation_thread = valuation(*args, **valuation_parameters, **kwargs)
     valuation_thread.start()
     valuation_thread.join()
@@ -66,8 +69,10 @@ def main(*args, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    sysParameters = dict(discount=0.0, fees=0.0)
-    main(parameters=sysParameters)
+    current = Datetime(year=2024, month=7, day=18)
+    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100)
+    sysParameters = dict(current=current, discount=0.0, fees=0.0)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 
