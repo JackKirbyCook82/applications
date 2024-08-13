@@ -11,6 +11,7 @@ import sys
 import time
 import logging
 import warnings
+import pandas as pd
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -99,6 +100,9 @@ def main(*args, arguments, parameters, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
+    pd.set_option("display.max_columns", 50)
+    pd.set_option("display.max_rows", 50)
+    pd.set_option("display.width", 250)
     current = Datetime(year=2024, month=7, day=18)
     sysArguments = dict(apy=0.50, size=10, pursue=1, accept=20, capacity=20)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)

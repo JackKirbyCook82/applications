@@ -12,6 +12,7 @@ import time
 import logging
 import warnings
 import numpy as np
+import pandas as pd
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -27,7 +28,8 @@ from finance.technicals import TechnicalFiles
 from finance.securities import SecurityCalculator, SecurityFilter, SecurityFiles
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
-from finance.feasibility import FeasibilityCalculator, ExposureCalculator
+from finance.exposures import ExposureCalculator
+from finance.feasibility import FeasibilityCalculator
 from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
@@ -151,6 +153,9 @@ def main(*args, arguments, parameters, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
+    pd.set_option("display.max_columns", 50)
+    pd.set_option("display.max_rows", 50)
+    pd.set_option("display.width", 250)
     current = Datetime(year=2024, month=7, day=18)
     sysArguments = dict(apy=0.15, size=np.int32(10), volume=np.NaN, interest=np.NaN) | dict(pursue=1, accept=20, capacity=5)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)

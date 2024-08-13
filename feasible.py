@@ -11,6 +11,7 @@ import sys
 import logging
 import warnings
 import numpy as np
+import pandas as pd
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -26,7 +27,8 @@ from finance.securities import SecurityCalculator, SecurityFilter
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
 from finance.holdings import HoldingFiles
-from finance.feasibility import FeasibilityCalculator, ExposureCalculator
+from finance.exposures import ExposureCalculator
+from finance.feasibility import FeasibilityCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread
 from support.filtering import Criterion
@@ -41,7 +43,7 @@ __license__ = "MIT License"
 loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
 saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
 class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=loading_formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=loading_formatter): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=saving_formatter): pass
 
 
 def exposure(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):
@@ -52,11 +54,11 @@ def exposure(*args, directory, loading, saving, parameters={}, criterion={}, fun
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
-    portfolio_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
+    feasibility_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
-    exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + portfolio_calculator + valuation_saver
+    exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + feasibility_calculator + valuation_saver
     exposure_thread = SideThread(exposure_pipeline, name="PortfolioExposureThread")
-    exposure_thread.setup(current=current, **parameters)
+    exposure_thread.setup(**parameters)
     return exposure_thread
 
 
@@ -79,8 +81,11 @@ def main(*args, arguments, parameters, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
+    pd.set_option("display.max_columns", 50)
+    pd.set_option("display.max_rows", 50)
+    pd.set_option("display.width", 250)
     current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.50, size=np.int32(10), volume=np.NaN, interest=np.NaN)
+    sysArguments = dict(apy=-1, size=np.int32(10), volume=np.NaN, interest=np.NaN)
     sysParameters = dict(current=current, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 

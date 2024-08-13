@@ -10,6 +10,7 @@ import os
 import sys
 import logging
 import warnings
+import pandas as pd
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 
@@ -68,6 +69,9 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     logging.getLogger("seleniumwire").setLevel(logging.ERROR)
     warnings.filterwarnings("ignore")
+    pd.set_option("display.max_columns", 50)
+    pd.set_option("display.max_rows", 50)
+    pd.set_option("display.width", 250)
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]

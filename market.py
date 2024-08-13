@@ -10,6 +10,7 @@ import os
 import sys
 import logging
 import warnings
+import pandas as pd
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 
@@ -93,6 +94,9 @@ def main(*args, arguments, parameters, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
+    pd.set_option("display.max_columns", 50)
+    pd.set_option("display.max_rows", 50)
+    pd.set_option("display.width", 250)
     with open(API, "r") as apifile:
         sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
     with open(TICKERS, "r") as tickerfile:
