@@ -29,7 +29,7 @@ from finance.securities import SecurityCalculator, SecurityFilter, SecurityFiles
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
 from finance.exposures import ExposureCalculator
-from finance.feasibility import FeasibilityCalculator
+from finance.allocation import FeasibilityCalculator
 from finance.holdings import HoldingWriter, HoldingReader, HoldingFiles, HoldingTable
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
