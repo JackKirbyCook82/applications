@@ -42,10 +42,8 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
-saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=loading_formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=saving_formatter): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
@@ -104,10 +102,8 @@ def main(*args, arguments, parameters, **kwargs):
 
     valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}, Criterion.NULL: ["size"]}
-    factor_function = lambda count: (0.5 * np.sin(count * 2 * np.pi / 5) + 0.05 * count).astype(np.float32) * np.float32(0.0)
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    functions = dict(size=lambda cols: arguments["size"], volume=lambda cols: arguments["volume"], interest=lambda cols: arguments["interest"])
-    functions = functions | dict(factor=factor_function, priority=priority_function)
+    functions = dict(size=lambda cols: arguments["size"], volume=lambda cols: arguments["volume"], interest=lambda cols: arguments["interest"], priority=priority_function)
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
 
     market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
@@ -156,9 +152,9 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.15, size=np.int32(10), volume=np.NaN, interest=np.NaN) | dict(pursue=1, accept=20, capacity=5)
-    sysParameters = dict(current=current, discount=0.0, fees=0.0)
+    sysCurrent = Datetime(year=2024, month=7, day=18)
+    sysArguments = dict(apy=0.15, size=np.int32(10), volume=np.NaN, interest=np.NaN, pursue=1, accept=20, capacity=5)
+    sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

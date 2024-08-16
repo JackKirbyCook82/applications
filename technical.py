@@ -11,6 +11,7 @@ import sys
 import logging
 import warnings
 import pandas as pd
+import xarray as xr
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -30,10 +31,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.SYMBOL])}[{elapsed:.02f}s]"
-saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
-class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Symbol.fromstr, formatter=loading_formatter): pass
-class SymbolSaver(Saver, query=Variables.Querys.SYMBOL, formatter=saving_formatter): pass
+class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Symbol.fromstr): pass
+class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
 
 
 def technical(*args, directory, loading, saving, parameters={}, functions={}, **kwargs):
@@ -63,6 +62,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
+    xr.set_options(display_width=250)
     sysParameters = dict(period=252)
     main(parameters=sysParameters)
 

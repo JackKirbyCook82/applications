@@ -8,10 +8,12 @@ Created on Weds Jul 12 2023
 
 import os
 import sys
+import time
 import logging
 import warnings
 import numpy as np
 import pandas as pd
+import xarray as xr
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -30,7 +32,7 @@ from finance.holdings import HoldingFiles
 from finance.exposures import ExposureCalculator
 from finance.feasibility import FeasibilityCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
-from support.synchronize import SideThread
+from support.synchronize import CycleThread
 from support.filtering import Criterion
 
 __version__ = "1.0.0"
@@ -40,10 +42,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
-saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=loading_formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=saving_formatter): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
 def exposure(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):
@@ -57,7 +57,7 @@ def exposure(*args, directory, loading, saving, parameters={}, criterion={}, fun
     feasibility_calculator = FeasibilityCalculator(name="PortfolioFeasibilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
     exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + feasibility_calculator + valuation_saver
-    exposure_thread = SideThread(exposure_pipeline, name="PortfolioExposureThread")
+    exposure_thread = CycleThread(exposure_pipeline, name="PortfolioExposureThread")
     exposure_thread.setup(**parameters)
     return exposure_thread
 
@@ -75,6 +75,9 @@ def main(*args, arguments, parameters, **kwargs):
     exposure_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions, parameters=parameters)
     exposure_thread = exposure(*args, **exposure_parameters, **kwargs)
     exposure_thread.start()
+    while True:
+        time.sleep(10)
+    exposure_thread.cease()
     exposure_thread.join()
 
 
@@ -84,9 +87,10 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    current = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=-1, size=np.int32(10), volume=np.NaN, interest=np.NaN)
-    sysParameters = dict(current=current, discount=0.0, fees=0.0)
+    xr.set_options(display_width=250)
+    sysCurrent = Datetime(year=2024, month=7, day=18)
+    sysArguments = dict(apy=0.0, size=np.int32(10), volume=np.NaN, interest=np.NaN)
+    sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

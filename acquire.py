@@ -12,6 +12,7 @@ import time
 import logging
 import warnings
 import pandas as pd
+import xarray as xr
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -35,10 +36,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-loading_formatter = lambda self, *, results, elapsed, **kw: f"{str(self.title)}: {repr(self)}|{str(results[Variables.Querys.CONTRACT])}[{elapsed:.02f}s]"
-saving_formatter = lambda self, *, elapsed, **kw: f"{str(self.title)}: {repr(self)}[{elapsed:.02f}s]"
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr, formatter=loading_formatter): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT, formatter=saving_formatter): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
@@ -103,9 +102,10 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    current = Datetime(year=2024, month=7, day=18)
+    xr.set_options(display_width=250)
+    sysCurrent = Datetime(year=2024, month=7, day=18)
     sysArguments = dict(apy=0.50, size=10, pursue=1, accept=20, capacity=20)
-    sysParameters = dict(current=current, discount=0.0, fees=0.0)
+    sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
 
