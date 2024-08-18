@@ -20,7 +20,7 @@ MARKET = os.path.join(ROOT, "repository", "market")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Contract
+from finance.variables import Variables, Querys
 from finance.securities import SecurityFilter, SecurityFiles
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter, ValuationFiles
@@ -35,7 +35,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Querys.Contract.fromstr): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
@@ -44,7 +44,7 @@ def valuation(*args, directory, loading, saving, parameters={}, criterion={}, fu
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
-    valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
+    valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     valuation_saver = ContractSaver(name="MarketValuationSaver", destination=saving)
     valuation_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_saver
     valuation_thread = SideThread(valuation_pipeline, name="MarketValuationThread")
@@ -57,7 +57,7 @@ def main(*args, arguments, parameters, **kwargs):
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
 
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
-    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
 
     valuation_parameters = dict(directory=option_file, loading={option_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, parameters=parameters)

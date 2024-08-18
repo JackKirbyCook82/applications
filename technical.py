@@ -19,7 +19,7 @@ HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Symbol
+from finance.variables import Variables, Querys
 from finance.technicals import TechnicalCalculator, TechnicalFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread
@@ -31,7 +31,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Symbol.fromstr): pass
+class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Querys.Symbol.fromstr): pass
 class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
 
 

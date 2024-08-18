@@ -24,7 +24,7 @@ if ROOT not in sys.path:
 
 from etrade.market import ETradeContractDownloader, ETradeMarketDownloader
 from finance.securities import SecurityFiles
-from finance.variables import Variables, DateRange, Symbol
+from finance.variables import DateRange, Variables, Querys
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.files import Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, Requeuer, Queues
@@ -98,7 +98,7 @@ if __name__ == "__main__":
         sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
-        sysSymbols = [Symbol(ticker) for ticker in sysTickers]
+        sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
     sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, tickers=sysTickers)
     sysParameters = dict(expires=sysExpires)

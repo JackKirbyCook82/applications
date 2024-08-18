@@ -22,7 +22,7 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Contract
+from finance.variables import Variables, Querys
 from finance.valuations import ValuationFilter, ValuationFiles
 from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
@@ -36,13 +36,13 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Querys.Contract.fromstr): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
     valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
-    valuation_filter = ValuationFilter(name="MarketValuationFilter", criterion=criterion["valuation"])
+    valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = valuation_loader + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketValuationThread")
@@ -64,7 +64,7 @@ def main(*args, arguments, parameters, **kwargs):
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = HoldingTable(name="AcquisitionTable")
 
-    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     criterion = dict(valuation=valuation_criterion)
     functions = dict(priority=priority_function)

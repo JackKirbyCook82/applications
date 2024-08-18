@@ -23,7 +23,7 @@ HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Contract
+from finance.variables import Variables, Querys
 from finance.technicals import TechnicalFiles
 from finance.securities import SecurityCalculator, SecurityFilter
 from finance.strategies import StrategyCalculator
@@ -43,7 +43,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Querys.Contract.fromstr): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
@@ -54,9 +54,9 @@ def valuations(*args, directory, loading, saving, parameters={}, criterion={}, f
     security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="PortfolioStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="PortfolioValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
-    valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
+    valuation_filter = ValuationFilter(name="PortfolioValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     allocation_calculator = AllocationCalculator(name="PortfolioAllocationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
-    stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", **functions)
+    stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
     exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + allocation_calculator + stability_calculator + valuation_saver
     exposure_thread = CycleThread(exposure_pipeline, name="PortfolioValuationThread")
@@ -69,7 +69,7 @@ def main(*args, arguments, parameters, **kwargs):
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
 
-    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}}
     functions = dict(size=lambda cols: arguments["size"], volume=lambda cols: arguments["volume"], interest=lambda cols: arguments["interest"])
     criterion = dict(security=security_criterion, valuation=valuation_criterion)

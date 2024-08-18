@@ -21,7 +21,7 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Contract
+from finance.variables import Variables, Querys
 from finance.valuations import ValuationFilter, ValuationFiles
 from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
@@ -35,7 +35,7 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Querys.Contract.fromstr): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 
@@ -50,8 +50,8 @@ def portfolio(*args, directory, loading, table, parameters={}, criterion={}, fun
 
 
 def divestiture(*args, table, saving, parameters={}, **kwargs):
-    divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", source=table)
-    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", destination=saving, valuation=Variables.Valuations.ARBITRAGE)
+    divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", source=table, valuation=Variables.Valuations.ARBITRAGE)
+    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", destination=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
     divestiture_thread = CycleThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)
     divestiture_thread.setup(**parameters)
@@ -63,7 +63,7 @@ def main(*args, arguments, parameters, **kwargs):
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     divestiture_table = HoldingTable(name="DivestitureTable")
 
-    valuation_criterion = {Criterion.FLOOR: {"apy": arguments["apy"], "size": arguments["size"]}, Criterion.NULL: ["apy", "size"]}
+    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     criterion = dict(valuation=valuation_criterion)
     functions = dict(priority=priority_function)
