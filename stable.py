@@ -23,7 +23,7 @@ HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Querys
+from finance.variables import Variables, Contract
 from finance.technicals import TechnicalFiles
 from finance.securities import SecurityCalculator, SecurityFilter
 from finance.strategies import StrategyCalculator
@@ -43,7 +43,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Querys.Contract.fromstr): pass
+class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
 class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
 
 

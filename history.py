@@ -23,7 +23,7 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from yahoo.history import YahooHistoryDownloader
-from finance.variables import DateRange, Variables, Querys
+from finance.variables import DateRange, Variables, Symbol
 from finance.technicals import TechnicalFiles
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.files import Saver, FileTypes, FileTimings
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
-        sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
+        sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=60)).date()])
     sysArguments = dict(symbols=sysSymbols)
     sysParameters = dict(dates=sysDates)
