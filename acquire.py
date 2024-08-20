@@ -32,7 +32,7 @@ from support.filtering import Criterion
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = []
-__copyright__ = "Copyright 2023, Jack Kirby Cook"
+__copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
