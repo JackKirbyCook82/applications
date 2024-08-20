@@ -35,13 +35,13 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
+class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def portfolio(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
     valuation_loader = ContractLoader(name="PortfolioValuationLoader", source=loading, directory=directory)
-    valuation_filter = ValuationFilter(name="PortfolioValuationFilter", criterion=criterion["valuation"])
+    valuation_filter = ValuationFilter(name="PortfolioValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = valuation_loader + valuation_filter + divestiture_writer
     portfolio_thread = SideThread(portfolio_pipeline, name="PortfolioValuationThread")
@@ -83,7 +83,7 @@ def main(*args, arguments, parameters, **kwargs):
 
     divestiture_thread.start()
     portfolio_thread.start()
-    while bool(portfolio_thread) or bool(divestiture_table):
+    while True:
         if bool(divestiture_table):
             print(divestiture_table)
         time.sleep(10)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.50, size=10, pursue=1, accept=20, capacity=20)
+    sysArguments = dict(apy=0, size=10, pursue=0.25, accept=20, capacity=20)
     sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 

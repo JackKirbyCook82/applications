@@ -33,7 +33,7 @@ from finance.exposures import ExposureCalculator
 from finance.allocation import AllocationCalculator
 from finance.stability import StabilityCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
-from support.synchronize import CycleThread
+from support.synchronize import SideThread
 from support.filtering import Criterion
 
 __version__ = "1.0.0"
@@ -43,8 +43,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
+class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def valuations(*args, directory, loading, saving, parameters={}, criterion={}, functions={}, **kwargs):
@@ -59,7 +59,7 @@ def valuations(*args, directory, loading, saving, parameters={}, criterion={}, f
     stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_saver = ContractSaver(name="PortfolioValuationSaver", destination=saving)
     exposure_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + allocation_calculator + stability_calculator + valuation_saver
-    exposure_thread = CycleThread(exposure_pipeline, name="PortfolioValuationThread")
+    exposure_thread = SideThread(exposure_pipeline, name="PortfolioValuationThread")
     exposure_thread.setup(**parameters)
     return exposure_thread
 
@@ -71,15 +71,12 @@ def main(*args, arguments, parameters, **kwargs):
 
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"]}}
-    functions = dict(size=lambda cols: arguments["size"], volume=lambda cols: arguments["volume"], interest=lambda cols: arguments["interest"])
+    functions = dict(size=lambda cols: np.int64(100), volume=lambda cols: np.NaN, interest=lambda cols: np.NaN)
     criterion = dict(security=security_criterion, valuation=valuation_criterion)
 
     valuations_parameters = dict(directory=holdings_file, loading={holdings_file: "r", statistic_file: "r"}, saving={arbitrage_file: "w"}, criterion=criterion, functions=functions, parameters=parameters)
     valuations_thread = valuations(*args, **valuations_parameters, **kwargs)
     valuations_thread.start()
-    while True:
-        time.sleep(10)
-    valuations_thread.cease()
     valuations_thread.join()
 
 
@@ -90,9 +87,10 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
+    sysFactor = lambda Θ, Φ, ε: 1 + (Φ * ε)
     sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=-1, size=np.int32(10), volume=np.NaN, interest=np.NaN)
-    sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
+    sysArguments = dict(apy=0, size=10)
+    sysParameters = dict(factor=sysFactor, current=sysCurrent, discount=0.0, fees=0.0, divergence=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

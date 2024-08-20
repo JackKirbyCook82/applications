@@ -31,8 +31,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolLoader(Loader, query=Variables.Querys.SYMBOL, create=Symbol.fromstr): pass
-class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
+class SymbolLoader(Loader, variable=Variables.Querys.SYMBOL, create=Symbol.fromstr): pass
+class SymbolSaver(Saver, variable=Variables.Querys.SYMBOL): pass
 
 
 def technical(*args, directory, loading, saving, parameters={}, functions={}, **kwargs):

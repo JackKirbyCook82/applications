@@ -38,17 +38,17 @@ __license__ = "MIT License"
 
 
 class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
-class SymbolDequeuer(Dequeuer, query=Variables.Querys.SYMBOL): pass
-class SymbolSaver(Saver, query=Variables.Querys.SYMBOL): pass
+class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL): pass
+class SymbolSaver(Saver, variable=Variables.Querys.SYMBOL): pass
 
 
-def history(*args, reader, source, saving, dates=[], parameters={}, **kwargs):
+def history(*args, reader, source, saving, parameters={}, **kwargs):
     history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", source=source)
     history_downloader = YahooHistoryDownloader(name="HistoryDownloader", feed=reader)
     history_saver = SymbolSaver(name="HistorySaver", destination=saving)
     history_pipeline = history_dequeuer + history_downloader + history_saver
     history_thread = SideThread(history_pipeline, name="HistoryThread")
-    history_thread.setup(dates=dates, **parameters)
+    history_thread.setup(**parameters)
     return history_thread
 
 

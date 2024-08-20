@@ -36,8 +36,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, query=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
+class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.50, size=10, pursue=1, accept=20, capacity=20)
+    sysArguments = dict(apy=0.50, size=10, pursue=0.75, accept=20, capacity=20)
     sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 

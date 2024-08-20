@@ -45,10 +45,10 @@ base = "https://api.etrade.com"
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-class SymbolDequeuer(Dequeuer, query=Variables.Querys.SYMBOL): pass
-class ContractRequeuer(Requeuer, query=Variables.Querys.CONTRACT): pass
-class ContractDequeuer(Dequeuer, query=Variables.Querys.CONTRACT): pass
-class ContractSaver(Saver, query=Variables.Querys.CONTRACT): pass
+class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL): pass
+class ContractRequeuer(Requeuer, variable=Variables.Querys.CONTRACT): pass
+class ContractDequeuer(Dequeuer, variable=Variables.Querys.CONTRACT): pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def contracts(*args, reader, source, destination, parameters={}, **kwargs):
@@ -72,7 +72,7 @@ def security(*args, reader, source, saving, parameters={}, **kwargs):
 
 
 def main(*args, arguments, parameters, **kwargs):
-    contract_queue = Queues.FIFO(name="ContractQueue", values=arguments["tickers"], capacity=None)
+    contract_queue = Queues.FIFO(name="ContractQueue", values=arguments["symbols"], capacity=None)
     security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
@@ -100,7 +100,7 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
-    sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, tickers=sysTickers)
+    sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols)
     sysParameters = dict(expires=sysExpires)
     main(arguments=sysArguments, parameters=sysParameters)
 
