@@ -23,7 +23,9 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from finance.variables import Variables, Contract
-from finance.valuations import ValuationFilter, ValuationFiles
+from finance.securities import SecurityFilter, SecurityFiles
+from finance.strategies import StrategyCalculator
+from finance.valuations import ValuationCalculator, ValuationFilter
 from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import SideThread, CycleThread
@@ -41,11 +43,14 @@ class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
-    valuation_loader = ContractLoader(name="MarketValuationLoader", source=loading, directory=directory)
+    security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory)
+    security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
+    strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
+    valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
-    market_pipeline = valuation_loader + valuation_filter + acquisition_writer
-    market_thread = SideThread(market_pipeline, name="MarketValuationThread")
+    market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
+    market_thread = SideThread(market_pipeline, name="MarketThread")
     market_thread.setup(**parameters)
     return market_thread
 
@@ -60,37 +65,26 @@ def acquisition(*args, table, saving, parameters={}, **kwargs):
 
 
 def main(*args, arguments, parameters, **kwargs):
-    arbitrage_file = ValuationFiles.Arbitrage(name="ArbitrageFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = HoldingTable(name="AcquisitionTable")
 
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
+    security_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     priority_function = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    criterion = dict(valuation=valuation_criterion)
+    criterion = dict(valuation=valuation_criterion, security=security_criterion)
     functions = dict(priority=priority_function)
 
-    market_parameters = dict(directory=arbitrage_file, loading={arbitrage_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
+    market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
     acquisition_parameters = dict(table=acquisition_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions, parameters=parameters)
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
 
-    wrapper_function = lambda function: lambda dataframe: (function(dataframe).cumsum() < arguments["capacity"] + 1) & function(dataframe)
-    abandon_function = lambda dataframe: (dataframe["priority"] < arguments["pursue"])
-    reject_function = lambda dataframe: (dataframe["priority"] >= arguments["pursue"]) & (dataframe["size"] < arguments["accept"])
-    accept_function = lambda dataframe: (dataframe["priority"] >= arguments["pursue"]) & (dataframe["size"] >= arguments["accept"])
-    abandon_function = wrapper_function(abandon_function)
-    reject_function = wrapper_function(reject_function)
-    accept_function = wrapper_function(accept_function)
-
     acquisition_thread.start()
     market_thread.start()
     while bool(market_thread) or bool(acquisition_table):
-        if bool(acquisition_table):
-            print(acquisition_table)
+        if bool(acquisition_table): print(acquisition_table)
         time.sleep(10)
-        acquisition_table.change(abandon_function, "status", Variables.Status.ABANDONED)
-        acquisition_table.change(reject_function, "status", Variables.Status.REJECTED)
-        acquisition_table.change(accept_function, "status", Variables.Status.ACCEPTED)
     acquisition_thread.cease()
     market_thread.join()
     acquisition_thread.join()
@@ -104,7 +98,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.50, size=10, pursue=0.75, accept=20, capacity=20)
+    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100)
     sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 

@@ -24,9 +24,9 @@ if ROOT not in sys.path:
 
 from yahoo.history import YahooHistoryDownloader
 from finance.variables import DateRange, Variables, Symbol
-from finance.technicals import TechnicalFiles
+from finance.technicals import TechnicalCalculator, TechnicalFiles
 from webscraping.webdrivers import WebDriver, WebBrowser
-from support.files import Saver, FileTypes, FileTimings
+from support.files import Loader, Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, Queues
 from support.synchronize import SideThread
 
@@ -38,8 +38,9 @@ __license__ = "MIT License"
 
 
 class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
-class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL): pass
+class SymbolLoader(Loader, variable=Variables.Querys.SYMBOL, create=Symbol.fromstr): pass
 class SymbolSaver(Saver, variable=Variables.Querys.SYMBOL): pass
+class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL): pass
 
 
 def history(*args, reader, source, saving, parameters={}, **kwargs):
@@ -52,15 +53,32 @@ def history(*args, reader, source, saving, parameters={}, **kwargs):
     return history_thread
 
 
+def technicals(*args, directory, loading, saving, parameters={}, functions={}, **kwargs):
+    technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory, **functions)
+    technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
+    technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
+    technical_pipeline = technical_loader + technical_calculator + technical_saver
+    technical_thread = SideThread(technical_pipeline, name="TechnicalThread")
+    technical_thread.setup(**parameters)
+    return technical_thread
+
+
 def main(*args, arguments, parameters, **kwargs):
     bars_queue = Queues.FIFO(name="BarsQueue", values=arguments["symbols"], capacity=None)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
 
     with YahooDriver(name="HistoryReader") as history_reader:
         history_parameters = dict(reader=history_reader, source=bars_queue, saving={bars_file: "w"}, parameters=parameters)
         history_thread = history(*args, **history_parameters, **kwargs)
         history_thread.start()
         history_thread.join()
+
+    technical_parameters = dict(directory=bars_file, loading={bars_file: "r"}, saving={statistic_file: "w", stochastic_file: "w"}, parameters=parameters)
+    technical_thread = technicals(*args, **technical_parameters, **kwargs)
+    technical_thread.start()
+    technical_thread.join()
 
 
 if __name__ == "__main__":
@@ -73,9 +91,9 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
-    sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=60)).date()])
+    sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
     sysArguments = dict(symbols=sysSymbols)
-    sysParameters = dict(dates=sysDates)
+    sysParameters = dict(dates=sysDates, period=252)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

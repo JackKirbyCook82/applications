@@ -61,7 +61,7 @@ def contracts(*args, reader, source, destination, parameters={}, **kwargs):
     return contract_thread
 
 
-def security(*args, reader, source, saving, parameters={}, **kwargs):
+def securities(*args, reader, source, saving, parameters={}, **kwargs):
     security_dequeuer = ContractDequeuer(name="MarketSecurityDequeuer", source=source)
     security_downloader = ETradeMarketDownloader(name="MarketSecurityDownloader", feed=reader)
     security_saver = ContractSaver(name="MarketSecuritySaver", destination=saving)
@@ -81,7 +81,7 @@ def main(*args, arguments, parameters, **kwargs):
         contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue, parameters=parameters)
         security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"}, parameters=parameters)
         contract_thread = contracts(*args, **contract_parameters, **kwargs)
-        security_thread = security(*args, **security_parameters, **kwargs)
+        security_thread = securities(*args, **security_parameters, **kwargs)
         contract_thread.start()
         contract_thread.join()
         security_thread.start()
