@@ -44,9 +44,9 @@ class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL): pass
 
 
 def history(*args, reader, source, saving, parameters={}, **kwargs):
-    history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", source=source)
-    history_downloader = YahooHistoryDownloader(name="HistoryDownloader", feed=reader)
-    history_saver = SymbolSaver(name="HistorySaver", destination=saving)
+    history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", datastack=source)
+    history_downloader = YahooHistoryDownloader(name="HistoryDownloader", datafeed=reader)
+    history_saver = SymbolSaver(name="HistorySaver", datafile=saving)
     history_pipeline = history_dequeuer + history_downloader + history_saver
     history_thread = SideThread(history_pipeline, name="HistoryThread")
     history_thread.setup(**parameters)
@@ -54,9 +54,9 @@ def history(*args, reader, source, saving, parameters={}, **kwargs):
 
 
 def technicals(*args, directory, loading, saving, parameters={}, functions={}, **kwargs):
-    technical_loader = SymbolLoader(name="TechnicalLoader", source=loading, directory=directory, **functions)
+    technical_loader = SymbolLoader(name="TechnicalLoader", datafile=loading, directory=directory, **functions)
     technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
-    technical_saver = SymbolSaver(name="TechnicalSaver", destination=saving)
+    technical_saver = SymbolSaver(name="TechnicalSaver", datafile=saving)
     technical_pipeline = technical_loader + technical_calculator + technical_saver
     technical_thread = SideThread(technical_pipeline, name="TechnicalThread")
     technical_thread.setup(**parameters)

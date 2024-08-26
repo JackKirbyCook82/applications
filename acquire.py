@@ -43,12 +43,12 @@ class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
-    security_loader = ContractLoader(name="MarketSecurityLoader", source=loading, directory=directory)
+    security_loader = ContractLoader(name="MarketSecurityLoader", datafile=loading, directory=directory)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
-    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
+    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", datatable=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
     market_thread = SideThread(market_pipeline, name="MarketThread")
     market_thread.setup(**parameters)
@@ -56,8 +56,8 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
 
 
 def acquisition(*args, table, saving, parameters={}, **kwargs):
-    acquisition_reader = HoldingReader(name="PortfolioAcquisitionReader", source=table, valuation=Variables.Valuations.ARBITRAGE)
-    acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", destination=saving)
+    acquisition_reader = HoldingReader(name="PortfolioAcquisitionReader", datatable=table, valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", datafile=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
     acquisition_thread = CycleThread(acquisition_pipeline, name="PortfolioAcquisitionThread", wait=10)
     acquisition_thread.setup(**parameters)

@@ -48,7 +48,7 @@ class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def portfolio(*args, directory, loading, table, reporter, parameters={}, criterion={}, functions={}, **kwargs):
-    holding_loader = ContractLoader(name="PortfolioHoldingLoader", source=loading, directory=directory)
+    holding_loader = ContractLoader(name="PortfolioHoldingLoader", datafile=loading, directory=directory)
     exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator", reporter=reporter, **functions)
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
     security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
@@ -57,7 +57,7 @@ def portfolio(*args, directory, loading, table, reporter, parameters={}, criteri
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     allocation_calculator = AllocationCalculator(name="PortfolioAllocationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
-    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", destination=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
+    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", datatable=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + allocation_calculator + stability_calculator + divestiture_writer
     portfolio_thread = CycleThread(portfolio_pipeline, name="PortfolioThread", wait=10)
     portfolio_thread.setup(**parameters)
@@ -65,8 +65,8 @@ def portfolio(*args, directory, loading, table, reporter, parameters={}, criteri
 
 
 def divestiture(*args, table, saving, parameters={}, **kwargs):
-    divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", source=table, valuation=Variables.Valuations.ARBITRAGE)
-    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", destination=saving)
+    divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", datatable=table, valuation=Variables.Valuations.ARBITRAGE)
+    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", datafile=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
     divestiture_thread = CycleThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)
     divestiture_thread.setup(**parameters)

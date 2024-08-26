@@ -52,9 +52,9 @@ class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def contracts(*args, reader, source, destination, parameters={}, **kwargs):
-    contract_dequeuer = SymbolDequeuer(name="MarketContractDequeuer", source=source)
-    contract_downloader = ETradeContractDownloader(name="MarketContractDownloader", feed=reader)
-    contract_requeuer = ContractRequeuer(name="MarketContractRequeuer", destination=destination)
+    contract_dequeuer = SymbolDequeuer(name="MarketContractDequeuer", datastack=source)
+    contract_downloader = ETradeContractDownloader(name="MarketContractDownloader", datafeed=reader)
+    contract_requeuer = ContractRequeuer(name="MarketContractRequeuer", datafile=destination)
     contract_pipeline = contract_dequeuer + contract_downloader + contract_requeuer
     contract_thread = SideThread(contract_pipeline, name="MarketContractThread")
     contract_thread.setup(**parameters)
@@ -62,9 +62,9 @@ def contracts(*args, reader, source, destination, parameters={}, **kwargs):
 
 
 def securities(*args, reader, source, saving, parameters={}, **kwargs):
-    security_dequeuer = ContractDequeuer(name="MarketSecurityDequeuer", source=source)
-    security_downloader = ETradeMarketDownloader(name="MarketSecurityDownloader", feed=reader)
-    security_saver = ContractSaver(name="MarketSecuritySaver", destination=saving)
+    security_dequeuer = ContractDequeuer(name="MarketSecurityDequeuer", datastack=source)
+    security_downloader = ETradeMarketDownloader(name="MarketSecurityDownloader", datafeed=reader)
+    security_saver = ContractSaver(name="MarketSecuritySaver", datafile=saving)
     security_pipeline = security_dequeuer + security_downloader + security_saver
     security_thread = SideThread(security_pipeline, name="MarketSecurityThread")
     security_thread.setup(**parameters)
