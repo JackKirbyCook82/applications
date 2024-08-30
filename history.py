@@ -64,7 +64,7 @@ def technicals(*args, directory, loading, saving, parameters={}, functions={}, *
 
 
 def main(*args, arguments, parameters, **kwargs):
-    bars_queue = Queues.FIFO(name="BarsQueue", values=arguments["symbols"], capacity=None)
+    bars_queue = Queues.FIFO(name="BarsQueue", contents=arguments["symbols"], capacity=None)
     bars_file = TechnicalFiles.Bars(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     stochastic_file = TechnicalFiles.Stochastic(name="StochasticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)

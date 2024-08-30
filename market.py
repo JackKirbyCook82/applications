@@ -72,7 +72,7 @@ def securities(*args, reader, source, saving, parameters={}, **kwargs):
 
 
 def main(*args, arguments, parameters, **kwargs):
-    contract_queue = Queues.FIFO(name="ContractQueue", values=arguments["symbols"], capacity=None)
+    contract_queue = Queues.FIFO(name="ContractQueue", contents=arguments["symbols"], capacity=None)
     security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
