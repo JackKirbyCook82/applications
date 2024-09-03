@@ -43,8 +43,8 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, create=Contract.fromstr): pass
-class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
+class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT, function=Contract.fromst): pass
 
 
 def portfolio(*args, directory, loading, table, reporter, parameters={}, criterion={}, functions={}, **kwargs):
