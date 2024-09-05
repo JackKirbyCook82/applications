@@ -28,7 +28,7 @@ from finance.technicals import TechnicalCalculator, TechnicalFiles
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, Queues
-from support.synchronize import SideThread
+from support.synchronize import RoutineThread
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -48,7 +48,7 @@ def history(*args, reader, source, saving, parameters={}, **kwargs):
     history_downloader = YahooHistoryDownloader(name="HistoryDownloader", datafeed=reader)
     history_saver = SymbolSaver(name="HistorySaver", datafile=saving)
     history_pipeline = history_dequeuer + history_downloader + history_saver
-    history_thread = SideThread(history_pipeline, name="HistoryThread")
+    history_thread = RoutineThread(history_pipeline, name="HistoryThread")
     history_thread.setup(**parameters)
     return history_thread
 
@@ -58,7 +58,7 @@ def technicals(*args, directory, loading, saving, parameters={}, functions={}, *
     technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
     technical_saver = SymbolSaver(name="TechnicalSaver", datafile=saving)
     technical_pipeline = technical_loader + technical_calculator + technical_saver
-    technical_thread = SideThread(technical_pipeline, name="TechnicalThread")
+    technical_thread = RoutineThread(technical_pipeline, name="TechnicalThread")
     technical_thread.setup(**parameters)
     return technical_thread
 

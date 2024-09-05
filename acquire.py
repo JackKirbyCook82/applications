@@ -28,8 +28,9 @@ from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
 from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
-from support.synchronize import SideThread, CycleThread
+from support.synchronize import RoutineThread, RepeatingThread
 from support.filtering import Criterion
+from support.pipelines import Routine
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -41,6 +42,10 @@ __license__ = "MIT License"
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
 class ContractSaver(Saver, variable=Variables.Querys.CONTRACT, function=Contract.fromst): pass
 
+class AcquisitionController(Routine):
+    def routine(self, *args, **kwargs):
+        pass
+
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
     security_loader = ContractLoader(name="MarketSecurityLoader", datafile=loading, directory=directory)
@@ -50,7 +55,7 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
     valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", datatable=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
-    market_thread = SideThread(market_pipeline, name="MarketThread")
+    market_thread = RoutineThread(market_pipeline, name="MarketThread")
     market_thread.setup(**parameters)
     return market_thread
 
@@ -59,7 +64,7 @@ def acquisition(*args, table, saving, parameters={}, **kwargs):
     acquisition_reader = HoldingReader(name="PortfolioAcquisitionReader", datatable=table, valuation=Variables.Valuations.ARBITRAGE)
     acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", datafile=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
-    acquisition_thread = CycleThread(acquisition_pipeline, name="PortfolioAcquisitionThread", wait=10)
+    acquisition_thread = RepeatingThread(acquisition_pipeline, name="PortfolioAcquisitionThread", wait=10)
     acquisition_thread.setup(**parameters)
     return acquisition_thread
 

@@ -33,8 +33,9 @@ from finance.exposures import ExposureCalculator, ExposureReporter
 from finance.allocation import AllocationCalculator
 from finance.stability import StabilityCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
-from support.synchronize import CycleThread
+from support.synchronize import RepeatingThread
 from support.filtering import Criterion
+from support.pipelines import Routine
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -45,6 +46,10 @@ __license__ = "MIT License"
 
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
 class ContractSaver(Saver, variable=Variables.Querys.CONTRACT, function=Contract.fromst): pass
+
+class DivestitureController(Routine):
+    def routine(self, *args, **kwargs):
+        pass
 
 
 def portfolio(*args, directory, loading, table, reporter, parameters={}, criterion={}, functions={}, **kwargs):
@@ -59,7 +64,7 @@ def portfolio(*args, directory, loading, table, reporter, parameters={}, criteri
     stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", datatable=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + allocation_calculator + stability_calculator + divestiture_writer
-    portfolio_thread = CycleThread(portfolio_pipeline, name="PortfolioThread", wait=10)
+    portfolio_thread = RepeatingThread(portfolio_pipeline, name="PortfolioThread", wait=10)
     portfolio_thread.setup(**parameters)
     return portfolio_thread
 
@@ -68,7 +73,7 @@ def divestiture(*args, table, saving, parameters={}, **kwargs):
     divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", datatable=table, valuation=Variables.Valuations.ARBITRAGE)
     divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", datafile=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
-    divestiture_thread = CycleThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)
+    divestiture_thread = RepeatingThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)
     divestiture_thread.setup(**parameters)
     return divestiture_thread
 

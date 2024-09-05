@@ -28,7 +28,7 @@ from finance.variables import DateRange, Variables, Symbol
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.files import Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, Requeuer, Queues
-from support.synchronize import SideThread
+from support.synchronize import RoutineThread
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -56,7 +56,7 @@ def contracts(*args, reader, source, destination, parameters={}, **kwargs):
     contract_downloader = ETradeContractDownloader(name="MarketContractDownloader", datafeed=reader)
     contract_requeuer = ContractRequeuer(name="MarketContractRequeuer", datafile=destination)
     contract_pipeline = contract_dequeuer + contract_downloader + contract_requeuer
-    contract_thread = SideThread(contract_pipeline, name="MarketContractThread")
+    contract_thread = RoutineThread(contract_pipeline, name="MarketContractThread")
     contract_thread.setup(**parameters)
     return contract_thread
 
@@ -66,7 +66,7 @@ def securities(*args, reader, source, saving, parameters={}, **kwargs):
     security_downloader = ETradeMarketDownloader(name="MarketSecurityDownloader", datafeed=reader)
     security_saver = ContractSaver(name="MarketSecuritySaver", datafile=saving)
     security_pipeline = security_dequeuer + security_downloader + security_saver
-    security_thread = SideThread(security_pipeline, name="MarketSecurityThread")
+    security_thread = RoutineThread(security_pipeline, name="MarketSecurityThread")
     security_thread.setup(**parameters)
     return security_thread
 
