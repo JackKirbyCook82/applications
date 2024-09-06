@@ -30,7 +30,6 @@ from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, Holding
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
 from support.filtering import Criterion
-from support.pipelines import Routine
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -40,11 +39,7 @@ __license__ = "MIT License"
 
 
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
-class ContractSaver(Saver, variable=Variables.Querys.CONTRACT, function=Contract.fromst): pass
-
-class AcquisitionController(Routine):
-    def routine(self, *args, **kwargs):
-        pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
@@ -84,10 +79,11 @@ def main(*args, arguments, parameters, **kwargs):
     acquisition_parameters = dict(table=acquisition_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions, parameters=parameters)
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
+    terminate = lambda: not bool(market_thread) and not bool(acquisition_table)
 
     acquisition_thread.start()
     market_thread.start()
-    while bool(market_thread) or bool(acquisition_table):
+    while not terminate():
         if bool(acquisition_table): print(acquisition_table)
         time.sleep(10)
     acquisition_thread.cease()

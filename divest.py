@@ -45,7 +45,7 @@ __license__ = "MIT License"
 
 
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
-class ContractSaver(Saver, variable=Variables.Querys.CONTRACT, function=Contract.fromst): pass
+class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 class DivestitureController(Routine):
     def routine(self, *args, **kwargs):

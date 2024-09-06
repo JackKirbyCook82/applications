@@ -39,7 +39,7 @@ __license__ = "MIT License"
 
 class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
 class SymbolLoader(Loader, variable=Variables.Querys.SYMBOL, function=Symbol.fromstr): pass
-class SymbolSaver(Saver, variable=Variables.Querys.SYMBOL, function=Symbol.fromstr): pass
+class SymbolSaver(Saver, variable=Variables.Querys.SYMBOL): pass
 class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL, function=Symbol.fromstr): pass
 
 
