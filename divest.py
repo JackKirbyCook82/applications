@@ -28,14 +28,13 @@ from finance.technicals import TechnicalFiles
 from finance.securities import SecurityCalculator, SecurityFilter
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
-from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
+from finance.holdings import ValuationWriter, ValuationReader, ValuationTable, HoldingFiles
 from finance.exposures import ExposureCalculator, ExposureReporter
 from finance.allocation import AllocationCalculator
 from finance.stability import StabilityCalculator
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RepeatingThread
 from support.filtering import Criterion
-from support.pipelines import Routine
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -47,13 +46,9 @@ __license__ = "MIT License"
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
 class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
-class DivestitureController(Routine):
-    def routine(self, *args, **kwargs):
-        pass
-
 
 def portfolio(*args, directory, loading, table, reporter, parameters={}, criterion={}, functions={}, **kwargs):
-    holding_loader = ContractLoader(name="PortfolioHoldingLoader", datafile=loading, directory=directory)
+    holding_loader = ContractLoader(name="PortfolioHoldingLoader", files=loading, directory=directory)
     exposure_calculator = ExposureCalculator(name="PortfolioExposureCalculator", reporter=reporter, **functions)
     security_calculator = SecurityCalculator(name="PortfolioSecurityCalculator", **functions)
     security_filter = SecurityFilter(name="PortfolioSecurityFilter", criterion=criterion["security"])
@@ -62,7 +57,7 @@ def portfolio(*args, directory, loading, table, reporter, parameters={}, criteri
     valuation_filter = ValuationFilter(name="PortfolioValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
     allocation_calculator = AllocationCalculator(name="PortfolioAllocationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     stability_calculator = StabilityCalculator(name="PortfolioStabilityCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
-    divestiture_writer = HoldingWriter(name="PortfolioDivestitureWriter", datatable=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
+    divestiture_writer = ValuationWriter(name="PortfolioDivestitureWriter", table=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     portfolio_pipeline = holding_loader + exposure_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + allocation_calculator + stability_calculator + divestiture_writer
     portfolio_thread = RepeatingThread(portfolio_pipeline, name="PortfolioThread", wait=10)
     portfolio_thread.setup(**parameters)
@@ -70,8 +65,8 @@ def portfolio(*args, directory, loading, table, reporter, parameters={}, criteri
 
 
 def divestiture(*args, table, saving, parameters={}, **kwargs):
-    divestiture_reader = HoldingReader(name="PortfolioDivestitureReader", datatable=table, valuation=Variables.Valuations.ARBITRAGE)
-    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", datafile=saving)
+    divestiture_reader = ValuationReader(name="PortfolioDivestitureReader", table=table, valuation=Variables.Valuations.ARBITRAGE)
+    divestiture_saver = ContractSaver(name="PortfolioDivestitureSaver", files=saving)
     divestiture_pipeline = divestiture_reader + divestiture_saver
     divestiture_thread = RepeatingThread(divestiture_pipeline, name="PortfolioDivestitureThread", wait=10)
     divestiture_thread.setup(**parameters)
@@ -81,7 +76,7 @@ def divestiture(*args, table, saving, parameters={}, **kwargs):
 def main(*args, logger, arguments, parameters, **kwargs):
     statistic_file = TechnicalFiles.Statistic(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    divestiture_table = HoldingTable(name="DivestitureTable")
+    divestiture_table = ValuationTable(name="DivestitureTable", valuation=Variables.Valuations.ARBITRAGE)
     exposure_reporter = ExposureReporter(name="PortfolioExposure")
 
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}

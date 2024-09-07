@@ -26,7 +26,7 @@ from finance.variables import Variables, Contract
 from finance.securities import SecurityFilter, SecurityFiles
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
-from finance.holdings import HoldingWriter, HoldingReader, HoldingTable, HoldingFiles
+from finance.holdings import ValuationWriter, ValuationReader, ValuationTable, HoldingFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
 from support.filtering import Criterion
@@ -43,12 +43,12 @@ class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
-    security_loader = ContractLoader(name="MarketSecurityLoader", datafile=loading, directory=directory)
+    security_loader = ContractLoader(name="MarketSecurityLoader", files=loading, directory=directory)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
-    acquisition_writer = HoldingWriter(name="MarketAcquisitionWriter", datatable=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
+    acquisition_writer = ValuationWriter(name="MarketAcquisitionWriter", table=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
     market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
     market_thread = RoutineThread(market_pipeline, name="MarketThread")
     market_thread.setup(**parameters)
@@ -56,8 +56,8 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
 
 
 def acquisition(*args, table, saving, parameters={}, **kwargs):
-    acquisition_reader = HoldingReader(name="PortfolioAcquisitionReader", datatable=table, valuation=Variables.Valuations.ARBITRAGE)
-    acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", datafile=saving)
+    acquisition_reader = ValuationReader(name="PortfolioAcquisitionReader", table=table, valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", files=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
     acquisition_thread = RepeatingThread(acquisition_pipeline, name="PortfolioAcquisitionThread", wait=10)
     acquisition_thread.setup(**parameters)
@@ -67,7 +67,7 @@ def acquisition(*args, table, saving, parameters={}, **kwargs):
 def main(*args, arguments, parameters, **kwargs):
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    acquisition_table = HoldingTable(name="AcquisitionTable")
+    acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
 
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
@@ -81,14 +81,14 @@ def main(*args, arguments, parameters, **kwargs):
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
     terminate = lambda: not bool(market_thread) and not bool(acquisition_table)
 
-    acquisition_thread.start()
+#    acquisition_thread.start()
     market_thread.start()
     while not terminate():
         if bool(acquisition_table): print(acquisition_table)
         time.sleep(10)
-    acquisition_thread.cease()
+#    acquisition_thread.cease()
     market_thread.join()
-    acquisition_thread.join()
+#    acquisition_thread.join()
 
 
 if __name__ == "__main__":
