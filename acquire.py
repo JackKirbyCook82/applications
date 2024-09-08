@@ -13,6 +13,7 @@ import logging
 import warnings
 import pandas as pd
 import xarray as xr
+from functools import update_wrapper
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -30,6 +31,7 @@ from finance.holdings import ValuationWriter, ValuationReader, ValuationTable, H
 from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
 from support.filtering import Criterion
+from support.pipelines import Routine
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -40,6 +42,48 @@ __license__ = "MIT License"
 
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
 class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
+
+
+class TradingRoutine(Routine):
+    def __new__(cls, *args, capacity, **kwargs):
+        instance = super().__new__(cls, *args, **kwargs)
+        pursue = instance.capacity(instance.pursue, capacity)
+        setattr(instance, "pursue", pursue)
+        return instance
+
+    def __init__(self, *args, table, discount, liquidity, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__liquidity = liquidity
+        self.__discount = discount
+        self.__table = table
+
+    def routine(self, *args, **kwargs):
+        with self.table.mutex:
+            if bool(self.table): print(self.table)
+            self.table.change(self.rejected, "status", Variables.Status.REJECTED)
+            self.table.change(self.accepted, "status", Variables.Status.ACCEPTED)
+            self.table.change(self.abandon, "status", Variables.Status.ABANDONED)
+            self.table.change(self.pursue, "status", Variables.Status.PENDING)
+            if bool(self.table): print(self.table)
+
+    def pursue(self, table): return (table["status"] == Variables.Status.PROSPECT) & (table["priority"] >= self.discount)
+    def abandon(self, table): return (table["status"] == Variables.Status.PROSPECT) & (table["priority"] < self.discount)
+    def accepted(self, table): return (table["status"] == Variables.Status.PENDING) & (table["size"] >= self.liquidity)
+    def rejected(self, table): return (table["status"] == Variables.Status.PENDING) & (table["size"] < self.liquidity)
+
+    @staticmethod
+    def capacity(method, capacity):
+        assert capacity is not None
+        def wrapper(table): return (method(table).cumsum() < capacity + 1) & method(table)
+        update_wrapper(wrapper, method)
+        return wrapper
+
+    @property
+    def liquidity(self): return self.__liquidity
+    @property
+    def discount(self): return self.__discount
+    @property
+    def table(self): return self.__table
 
 
 def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
@@ -54,14 +98,19 @@ def market(*args, directory, loading, table, parameters={}, criterion={}, functi
     market_thread.setup(**parameters)
     return market_thread
 
-
 def acquisition(*args, table, saving, parameters={}, **kwargs):
-    acquisition_reader = ValuationReader(name="PortfolioAcquisitionReader", table=table, valuation=Variables.Valuations.ARBITRAGE)
-    acquisition_saver = ContractSaver(name="PortfolioAcquisitionSaver", files=saving)
+    acquisition_reader = ValuationReader(name="AcquisitionReader", table=table, valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_saver = ContractSaver(name="AcquisitionSaver", files=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
-    acquisition_thread = RepeatingThread(acquisition_pipeline, name="PortfolioAcquisitionThread", wait=10)
+    acquisition_thread = RepeatingThread(acquisition_pipeline, name="AcquisitionThread", wait=10)
     acquisition_thread.setup(**parameters)
     return acquisition_thread
+
+def trading(*args, table, capacity, discount, liquidity, parameters={}, **kwargs):
+    trading_routine = TradingRoutine(name="TradingRoutine", table=table, capacity=capacity, discount=discount, liquidity=liquidity)
+    trading_thread = RepeatingThread(trading_routine, name="TradingThread", wait=10)
+    trading_thread.setup(**parameters)
+    return trading_thread
 
 
 def main(*args, arguments, parameters, **kwargs):
@@ -76,19 +125,22 @@ def main(*args, arguments, parameters, **kwargs):
     functions = dict(priority=priority_function)
 
     market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
-    acquisition_parameters = dict(table=acquisition_table, saving={holdings_file: "a"}, criterion=criterion, functions=functions, parameters=parameters)
+    acquisition_parameters = dict(saving={holdings_file: "a"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
+    trading_parameters = dict(table=acquisition_table, capacity=arguments["capacity"], discount=arguments["discount"], liquidity=arguments["liquidity"], parameters=parameters)
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
-    terminate = lambda: not bool(market_thread) and not bool(acquisition_table)
+    trading_thread = trading(*args, **trading_parameters, **kwargs)
 
-#    acquisition_thread.start()
+    terminate = lambda: not bool(market_thread) and not bool(acquisition_table)
+    trading_thread.start()
+    acquisition_thread.start()
     market_thread.start()
-    while not terminate():
-        if bool(acquisition_table): print(acquisition_table)
-        time.sleep(10)
-#    acquisition_thread.cease()
+    while not terminate(): time.sleep(15)
+    trading_thread.cease()
+    acquisition_thread.cease()
     market_thread.join()
-#    acquisition_thread.join()
+    acquisition_thread.join()
+    trading_thread.join()
 
 
 if __name__ == "__main__":
@@ -99,7 +151,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100)
+    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100, discount=0.75, liquidity=25, capacity=10)
     sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
