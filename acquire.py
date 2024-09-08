@@ -45,10 +45,11 @@ class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
 
 
 class TradingRoutine(Routine):
-    def __new__(cls, *args, capacity, **kwargs):
+    def __new__(cls, *args, capacity=None, **kwargs):
         instance = super().__new__(cls, *args, **kwargs)
-        pursue = instance.capacity(instance.pursue, capacity)
-        setattr(instance, "pursue", pursue)
+        if capacity is not None:
+            pursue = instance.capacity(instance.pursue, capacity)
+            setattr(instance, "pursue", pursue)
         return instance
 
     def __init__(self, *args, table, discount, liquidity, **kwargs):
@@ -151,7 +152,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=7, day=18)
-    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100, discount=0.75, liquidity=25, capacity=10)
+    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100, discount=0.75, liquidity=25, capacity=None)
     sysParameters = dict(current=sysCurrent, discount=0.0, fees=0.0)
     main(arguments=sysArguments, parameters=sysParameters)
 
