@@ -27,8 +27,9 @@ from finance.variables import Variables, Contract
 from finance.securities import SecurityFilter, SecurityFiles
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationFilter
-from finance.holdings import ValuationWriter, ValuationReader, ValuationTable, HoldingFiles
+from finance.holdings import ValuationTables, HoldingFiles
 from support.files import Loader, Saver, FileTypes, FileTimings
+from support.tables import Reader, Writer
 from support.synchronize import RoutineThread, RepeatingThread
 from support.filtering import Criterion
 from support.pipelines import Routine
@@ -42,6 +43,8 @@ __license__ = "MIT License"
 
 class ContractLoader(Loader, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
 class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
+class ContractWriter(Writer, variable=Variables.Querys.CONTRACT, function=Contract.fromstr): pass
+class ContractReader(Reader, variable=Variables.Querys.CONTRACT): pass
 
 
 class TradingRoutine(Routine):
@@ -87,20 +90,20 @@ class TradingRoutine(Routine):
     def table(self): return self.__table
 
 
-def market(*args, directory, loading, table, parameters={}, criterion={}, functions={}, **kwargs):
+def market(*args, loading, tables, directory, parameters={}, criterion={}, functions={}, **kwargs):
     security_loader = ContractLoader(name="MarketSecurityLoader", files=loading, directory=directory)
     security_filter = SecurityFilter(name="MarketSecurityFilter", criterion=criterion["security"])
     strategy_calculator = StrategyCalculator(name="MarketStrategyCalculator", **functions)
     valuation_calculator = ValuationCalculator(name="MarketValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, **functions)
     valuation_filter = ValuationFilter(name="MarketValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterion["valuation"])
-    acquisition_writer = ValuationWriter(name="MarketAcquisitionWriter", table=table, valuation=Variables.Valuations.ARBITRAGE, **functions)
+    acquisition_writer = ContractWriter(name="MarketAcquisitionWriter", tables=tables)
     market_pipeline = security_loader + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_writer
     market_thread = RoutineThread(market_pipeline, name="MarketThread")
     market_thread.setup(**parameters)
     return market_thread
 
-def acquisition(*args, table, saving, parameters={}, **kwargs):
-    acquisition_reader = ValuationReader(name="AcquisitionReader", table=table, valuation=Variables.Valuations.ARBITRAGE)
+def acquisition(*args, tables, saving, parameters={}, **kwargs):
+    acquisition_reader = ContractReader(name="AcquisitionReader", tables=tables)
     acquisition_saver = ContractSaver(name="AcquisitionSaver", files=saving)
     acquisition_pipeline = acquisition_reader + acquisition_saver
     acquisition_thread = RepeatingThread(acquisition_pipeline, name="AcquisitionThread", wait=10)
@@ -117,7 +120,7 @@ def trading(*args, table, capacity, discount, liquidity, parameters={}, **kwargs
 def main(*args, arguments, parameters, **kwargs):
     option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holdings_file = HoldingFiles.Holding(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_table = ValuationTables.Valuation(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
 
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     security_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
@@ -125,8 +128,8 @@ def main(*args, arguments, parameters, **kwargs):
     criterion = dict(valuation=valuation_criterion, security=security_criterion)
     functions = dict(priority=priority_function)
 
-    market_parameters = dict(directory=option_file, loading={option_file: "r"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
-    acquisition_parameters = dict(saving={holdings_file: "a"}, table=acquisition_table, criterion=criterion, functions=functions, parameters=parameters)
+    market_parameters = dict(loading={option_file: "r"}, tables=[acquisition_table], directory=option_file, criterion=criterion, functions=functions, parameters=parameters)
+    acquisition_parameters = dict(saving={holdings_file: "a"}, tables=[acquisition_table], criterion=criterion, functions=functions, parameters=parameters)
     trading_parameters = dict(table=acquisition_table, capacity=arguments["capacity"], discount=arguments["discount"], liquidity=arguments["liquidity"], parameters=parameters)
     market_thread = market(*args, **market_parameters, **kwargs)
     acquisition_thread = acquisition(*args, **acquisition_parameters, **kwargs)
