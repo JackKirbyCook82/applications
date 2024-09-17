@@ -22,13 +22,8 @@ API = os.path.join(ROOT, "applications", "api.txt")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from etrade.market import ETradeContractDownloader, ETradeMarketDownloader
-from finance.securities import SecurityFiles
-from finance.variables import DateRange, Variables, Symbol
+from finance.variables import DateRange, Symbol
 from webscraping.webreaders import WebAuthorizer, WebReader
-from support.files import Saver, FileTypes, FileTimings
-from support.queues import Dequeuer, Requeuer, Queues
-from support.synchronize import RoutineThread
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -45,47 +40,17 @@ base = "https://api.etrade.com"
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-class SymbolDequeuer(Dequeuer, variable=Variables.Querys.SYMBOL): pass
-class ContractRequeuer(Requeuer, variable=Variables.Querys.CONTRACT): pass
-class ContractDequeuer(Dequeuer, variable=Variables.Querys.CONTRACT): pass
-class ContractSaver(Saver, variable=Variables.Querys.CONTRACT): pass
-
-
-def contracts(*args, reader, source, destination, parameters={}, **kwargs):
-    contract_dequeuer = SymbolDequeuer(name="MarketContractDequeuer", queue=source)
-    contract_downloader = ETradeContractDownloader(name="MarketContractDownloader", feed=reader)
-    contract_requeuer = ContractRequeuer(name="MarketContractRequeuer", files=destination)
-    contract_pipeline = contract_dequeuer + contract_downloader + contract_requeuer
-    contract_thread = RoutineThread(contract_pipeline, name="MarketContractThread")
-    contract_thread.setup(**parameters)
-    return contract_thread
-
-
-def securities(*args, reader, source, saving, parameters={}, **kwargs):
-    security_dequeuer = ContractDequeuer(name="MarketSecurityDequeuer", queue=source)
-    security_downloader = ETradeMarketDownloader(name="MarketSecurityDownloader", feed=reader)
-    security_saver = ContractSaver(name="MarketSecuritySaver", files=saving)
-    security_pipeline = security_dequeuer + security_downloader + security_saver
-    security_thread = RoutineThread(security_pipeline, name="MarketSecurityThread")
-    security_thread.setup(**parameters)
-    return security_thread
 
 
 def main(*args, arguments, parameters, **kwargs):
-    contract_queue = Queues.FIFO(name="ContractQueue", contents=arguments["symbols"], capacity=None)
-    security_queue = Queues.FIFO(name="SecurityQueue", contents=[], capacity=None)
-    option_file = SecurityFiles.Option(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
+    symbol_queue = FIFOQueue(name="SymbolQueue", contents=arguments["symbols"], capacity=None)
+    option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
 
-    with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as security_reader:
-        contract_parameters = dict(reader=security_reader, source=contract_queue, destination=security_queue, parameters=parameters)
-        security_parameters = dict(reader=security_reader, source=security_queue, saving={option_file: "w"}, parameters=parameters)
-        contract_thread = contracts(*args, **contract_parameters, **kwargs)
-        security_thread = securities(*args, **security_parameters, **kwargs)
-        contract_thread.start()
-        contract_thread.join()
-        security_thread.start()
-        security_thread.join()
+    authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
+    with ETradeReader(name="SecurityReader", authorizer=authorizer) as reader:
+
+        contract_downloader = ETradeContractDownloader(name="ContractDownloader", feed=reader)
+        security_downloader = ETradeOptionDownloader(name="OptionDownloader", feed=reader)
 
 
 if __name__ == "__main__":
@@ -99,7 +64,7 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
-    sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=60)).date()])
+    sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols)
     sysParameters = dict(expires=sysExpires)
     main(arguments=sysArguments, parameters=sysParameters)
