@@ -24,6 +24,7 @@ if ROOT not in sys.path:
 
 from finance.variables import DateRange, Symbol
 from webscraping.webreaders import WebAuthorizer, WebReader
+from support.files import FileTypes, FileTimings
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"

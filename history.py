@@ -22,8 +22,9 @@ CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import DateRange, Symbol
+from finance.variables import DateRange, Variables, Symbol
 from webscraping.webdrivers import WebDriver, WebBrowser
+from support.files import FileTypes, FileTimings
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
