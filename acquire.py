@@ -21,10 +21,6 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables
-from support.files import FileTypes, FileTimings
-from support.processes import Criterion
-
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = []
@@ -33,20 +29,7 @@ __license__ = "MIT License"
 
 
 def main(*args, arguments, parameters, **kwargs):
-    option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    holdings__file = HoldingsFile(name="HoldingsFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    valuation_table = ValuationTable(name="ValuationTable", valuation=Variables.Valuations.ARBITRAGE)
-
-    option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
-    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
-    criterions = dict(valuation=valuation_criterion, option=option_criterion)
-
-    option_filter = OptionFilter(name="OptionFilter", criterion=criterions["option"])
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Variables.Strategies))
-    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    valuation_filter = ValuationFilter(name="ValuationFilter", valuation=Variables.Valuations.ARBITRAGE, criterion=criterions["valuation"])
-
-    holdings_calculator = HoldingsCalculator(name="HoldingsCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    pass
 
 
 if __name__ == "__main__":

@@ -24,7 +24,6 @@ if ROOT not in sys.path:
 
 from finance.variables import DateRange, Symbol
 from webscraping.webreaders import WebAuthorizer, WebReader
-from support.files import FileTypes, FileTimings
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -44,14 +43,7 @@ class ETradeReader(WebReader, delay=10): pass
 
 
 def main(*args, arguments, parameters, **kwargs):
-    symbol_queue = FIFOQueue(name="SymbolQueue", contents=arguments["symbols"], capacity=None)
-    option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-
-    authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
-    with ETradeReader(name="SecurityReader", authorizer=authorizer) as reader:
-
-        contract_downloader = ETradeContractDownloader(name="ContractDownloader", feed=reader)
-        security_downloader = ETradeOptionDownloader(name="OptionDownloader", feed=reader)
+    pass
 
 
 if __name__ == "__main__":

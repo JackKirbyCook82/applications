@@ -22,9 +22,8 @@ CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import DateRange, Variables, Symbol
+from finance.variables import DateRange, Symbol
 from webscraping.webdrivers import WebDriver, WebBrowser
-from support.files import FileTypes, FileTimings
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -37,14 +36,7 @@ class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay
 
 
 def main(*args, arguments, parameters, **kwargs):
-    symbol_queue = FIFOQueue(name="SymbolQueue", contents=arguments["symbols"], capacity=None)
-    bars_file = BarsFile(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    statistic_file = StatisticFile(name="StatisticFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-
-    with YahooDriver(name="HistoryReader") as reader:
-
-        bars_downloader = YahooBarsDownloader(name="BarsDownloader", feed=reader)
-        statistic_calculator = TechnicalCalculator(name="StatisticCalculator", technical=Variables.Technicals.STATICTIC)
+    pass
 
 
 if __name__ == "__main__":
