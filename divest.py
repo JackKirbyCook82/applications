@@ -21,6 +21,10 @@ HISTORY = os.path.join(ROOT, "repository", "history")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
+from finance.holdings import HoldingFile
+from finance.technicals import BarsFile
+from support.files import FileTypes, FileTimings
+
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = []
@@ -29,7 +33,8 @@ __license__ = "MIT License"
 
 
 def main(*args, arguments, parameters, **kwargs):
-    pass
+    holdingFile = HoldingFile(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    barsFile = BarsFile(name="BarsFile", reporsitory=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
 
 
 if __name__ == "__main__":
