@@ -23,7 +23,7 @@ API = os.path.join(ROOT, "applications", "api.txt")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import DateRange, Variables, Symbol
+from finance.variables import DateRange, Variables, Symbol, Contract
 from finance.securities import OptionFile, SecurityFilter
 from etrade.market import ETradeSecurityDownloader, ETradeProductDownloader
 from webscraping.webreaders import WebAuthorizer, WebReader
@@ -50,22 +50,19 @@ class ETradeReader(WebReader, delay=10): pass
 def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     security_authorizer = ETradeAuthorizer(name="SecurityAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
-
-    stock_downloader = ETradeSecurityDownloader(name="StockDownloader", instrument=Variables.Instruments.STOCK, feed=None)
-    product_downloader = ETradeProductDownloader(name="ProductDownloader", feed=None)
-    option_downloader = ETradeSecurityDownloader(name="OptionDownloader", instrument=Variables.Instruments.OPTION, feed=None)
-    option_filter = SecurityFilter(name="OptionFilter", criterion=option_criterion)
-    option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-
-    with ETradeReader(name="SecurityReader", authorizer=security_authorizer) as reader:
-
-        pipeline = [stock_downloader, product_downloader, option_downloader, option_filter]
-        producer = pipeline[0](source=arguments["symbols"], **parameters)
-        pipeline = reduce(lambda source, function: function(source=source, **parameters), pipeline[1:], producer)
-        for dataframe in iter(pipeline):
-            for contract, dataset in dataframe.groupby(["ticker", "expire"]):
-                contract = Variables.Querys.CONTRACT(*contract)
-                option_file.write(dataset, query=contract, mode="a")
+    with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
+        stock_downloader = ETradeSecurityDownloader(name="StockDownloader", instrument=Variables.Instruments.STOCK, feed=reader)
+        product_downloader = ETradeProductDownloader(name="ProductDownloader", feed=reader)
+        option_downloader = ETradeSecurityDownloader(name="OptionDownloader", instrument=Variables.Instruments.OPTION, feed=reader)
+        option_filter = SecurityFilter(name="OptionFilter", criterion=option_criterion)
+        option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+        market_pipeline = [stock_downloader, product_downloader, option_downloader, option_filter]
+        market_producer = market_pipeline[0](source=arguments["symbols"], **parameters)
+        market_pipeline = reduce(lambda source, function: function(source=source, **parameters), market_pipeline[1:], market_producer)
+        for options in iter(market_pipeline):
+            for contract, dataframe in options.groupby(Contract.variables):
+                contract = Contract(*contract)
+                option_file.write(dataframe, query=contract, mode="w")
 
 
 if __name__ == "__main__":
@@ -77,7 +74,7 @@ if __name__ == "__main__":
     with open(API, "r") as apifile:
         sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
     with open(TICKERS, "r") as tickerfile:
-        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:10]
+        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, size=0, volume=0, interest=0)
