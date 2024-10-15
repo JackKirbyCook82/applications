@@ -21,7 +21,7 @@ PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Variables, Querys, DateRange
+from finance.variables import Variables, Querys
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
