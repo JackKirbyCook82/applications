@@ -41,9 +41,10 @@ class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay
 
 def main(*args, arguments, parameters, **kwargs):
     bars_file = BarsFile(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+
     with YahooDriver(name="HistoryReader") as reader:
         bars_downloader = YahooTechnicalDownloader(name="BarsDownloader", feed=reader, technical=Variables.Technicals.BARS)
-        bars_saver = Saver(name="BarsSaver", file=bars_file, mode="w", query=Querys.Symbol)
+        bars_saver = Saver(name="BarsSaver", file=bars_file, mode="w")
 
 
 if __name__ == "__main__":
