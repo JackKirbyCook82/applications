@@ -75,10 +75,10 @@ def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
     option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    symbol_queue = FIFOQueue(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
-        symbol_source = Dequeue(name="SymbolSource", queue=symbol_queue, query=Querys.Symbol)
+        symbol_dequeue = Dequeue(name="SymbolSource", queue=symbol_queue, query=Querys.Symbol)
         stock_downloader = ETradeSecurityDownloader(name="StockDownloader", feed=reader, instrument=Variables.Instruments.STOCK)
         product_downloader = ETradeProductDownloader(name="ProductDownloader", feed=reader)
         option_downloader = ETradeSecurityDownloader(name="OptionDownloader", feed=reader, instrument=Variables.Instruments.OPTION)
@@ -88,7 +88,7 @@ def main(*args, arguments, parameters, **kwargs):
         downloaders = dict(stock=stock_downloader, product=product_downloader, option=option_downloader)
         filters = dict(option=option_filter)
 
-        market_routine = ETradeMarket(symbol_source, option_saver, downloaders=downloaders, filters=filters)
+        market_routine = ETradeMarket(symbol_dequeue, option_saver, downloaders=downloaders, filters=filters)
         market_thread = RoutineThread(market_routine).setup(**parameters)
         market_thread.start()
         market_thread.join()
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     with open(API, "r") as apifile:
         sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
     with open(TICKERS, "r") as tickerfile:
-        sysSymbols = [{"ticker": str(string).strip().upper()} for string in tickerfile.read().split("\n")]
+        sysSymbols = [Querys.Symbol(str(string).strip().upper()) for string in tickerfile.read().split("\n")]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, size=0, volume=0, interest=0)
     sysParameters = dict(expires=sysExpires)

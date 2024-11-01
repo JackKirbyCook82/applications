@@ -22,11 +22,10 @@ CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from yahoo.history import YahooTechnicalDownloader
-from finance.variables import Variables, Querys, DateRange
+from finance.variables import Querys, DateRange
 from finance.technicals import BarsFile
 from webscraping.webdrivers import WebDriver, WebBrowser
-from support.files import Saver, FileTypes, FileTimings
+from support.files import FileTypes, FileTimings
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -43,8 +42,7 @@ def main(*args, arguments, parameters, **kwargs):
     bars_file = BarsFile(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
 
     with YahooDriver(name="HistoryReader") as reader:
-        bars_downloader = YahooTechnicalDownloader(name="BarsDownloader", feed=reader, technical=Variables.Technicals.BARS)
-        bars_saver = Saver(name="BarsSaver", file=bars_file, mode="w")
+        pass
 
 
 if __name__ == "__main__":
