@@ -13,7 +13,6 @@ import logging
 import warnings
 import pandas as pd
 import xarray as xr
-from functools import update_wrapper
 from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -28,7 +27,7 @@ from finance.securities import OptionFile
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator, ValuationWriter, ValuationReader, ValuationTable
 from finance.holdings import HoldingCalculator, HoldingFile
-from support.files import Loader, Saver, FileTypes, FileTimings
+from support.files import Directory, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
 from support.filtering import Filter, Criterion
 from support.mixins import AttributeNode
@@ -44,23 +43,18 @@ class Valuation(object):
     def __init__(self, options, valuations, *args, calculators, filters, **kwargs):
         self.calculators = AttributeNode(calculators)
         self.filters = AttributeNode(filters)
-        self.valuation = valuations
+        self.valuations = valuations
         self.options = options
 
     def __call__(self, *args, **kwargs):
-        for (contract, options) in self.options(*args, **kwargs):
-            source = (contract, options)
-            options = self.filters.option(source, *args, **kwargs)
+        for contract, options in self.options(*args, **kwargs):
+            options = self.filters.options(contract, options, *args, **kwargs)
             if options is None: continue
-            source = (contract, options)
-            for strategies in self.calculators.strategy(source, *args, **kwargs):
-                source = (contract, strategies)
-                for valuations in self.calculators.valuation(source, *args, **kwargs):
-                    source = (contract, valuations)
-                    valuations = self.filters.valuation(source, *args, **kwargs)
+            for strategies in self.calculators.strategies(contract, options, *args, **kwargs):
+                for valuations in self.calculators.valuations(contract, strategies, *args, **kwargs):
+                    valuations = self.filters.valuations(contract, valuations, *args, **kwargs)
                     if valuations is None: continue
-                    source = (contract, valuations)
-                    self.valuations(source, *args, **kwargs)
+                    self.valuations(contract, valuations, *args, **kwargs)
 
 
 class Acquisition(object):
@@ -70,47 +64,35 @@ class Acquisition(object):
         self.holdings = holdings
 
     def __call__(self, *args, **kwargs):
-        for (scope, valuations) in self.valuations(*args, **kwargs):
-            contract = Querys.Contract(scope)
-            source = (contract, valuations)
-            holdings = self.calculators.holding(source, *args, **kwargs)
-            source = (contract, holdings)
-            self.holdings(source, *args, **kwargs)
+        for contract, valuations in self.valuations(*args, **kwargs):
+            holdings = self.calculators.holdings(contract, valuations, *args, **kwargs)
+            self.holdings(contract, holdings, *args, **kwargs)
 
 
 class Trading(object):
-    def __new__(cls, *args, capacity=None, **kwargs):
-        instance = super().__new__(cls)
-        if capacity is not None:
-            pursue = instance.capacity(instance.pursue, capacity)
-            setattr(instance, "pursue", pursue)
-        return instance
-
-    def __init__(self, table, *args, discount, liquidity, **kwargs):
+    def __init__(self, table, *args, discount, liquidity, capacity, **kwargs):
         self.liquidity = liquidity
         self.discount = discount
+        self.capacity = capacity
         self.table = table
 
     def __call__(self, *args, **kwargs):
+        if not bool(self.table): return
         with self.table.mutex:
-            if bool(self.table): print(self.table)
-            self.table.change(self.rejected, "status", Variables.Status.REJECTED)
-            self.table.change(self.accepted, "status", Variables.Status.ACCEPTED)
-            self.table.change(self.abandon, "status", Variables.Status.ABANDONED)
-            self.table.change(self.pursue, "status", Variables.Status.PENDING)
-            if bool(self.table): print(self.table)
+            print(self.table)
+            pursue = self.status(Variables.Status.PROSPECT) & (self.table[:, "priority"] >= self.discount)
+            pursue = self.limit(pursue)
+            abandon = self.status(Variables.Status.PROSPECT) & (self.table[:, "priority"] < self.discount)
+            accepted = self.status(Variables.Status.PENDING) & (self.table[:, "size"] >= self.liquidity)
+            rejected = self.status(Variables.Status.PENDING) & (self.table[:, "size"] < self.liquidity)
+            self.table.change(rejected, "status", Variables.Status.REJECTED)
+            self.table.change(accepted, "status", Variables.Status.ACCEPTED)
+            self.table.change(abandon, "status", Variables.Status.ABANDONED)
+            self.table.change(pursue, "status", Variables.Status.PENDING)
+            print(self.table)
 
-    def pursue(self, table): return (table[:, "status"] == Variables.Status.PROSPECT) & (table[:, "priority"] >= self.discount)
-    def abandon(self, table): return (table[:, "status"] == Variables.Status.PROSPECT) & (table[:, "priority"] < self.discount)
-    def accepted(self, table): return (table[:, "status"] == Variables.Status.PENDING) & (table[:, "size"] >= self.liquidity)
-    def rejected(self, table): return (table[:, "status"] == Variables.Status.PENDING) & (table[:, "size"] < self.liquidity)
-
-    @staticmethod
-    def capacity(method, capacity):
-        assert capacity is not None
-        def wrapper(table): return (method(table).cumsum() < capacity + 1) & method(table)
-        update_wrapper(wrapper, method)
-        return wrapper
+    def status(self, status): return self.table[:, "status"] == status
+    def limit(self, mask): return (mask.cumsum() < self.capacity + 1) & mask
 
 
 def main(*args, arguments, parameters, **kwargs):
@@ -121,7 +103,7 @@ def main(*args, arguments, parameters, **kwargs):
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
 
-    option_loader = Loader(name="OptionLoader", file=option_file, query=Querys.Contract, mode="r")
+    option_loader = Directory(name="OptionLoader", file=option_file, query=Querys.Contract, mode="r")
     option_filter = Filter(name="OptionFilter", criterion=option_criterion)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=Variables.Strategies)
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
@@ -131,8 +113,8 @@ def main(*args, arguments, parameters, **kwargs):
     holding_calculator = HoldingCalculator(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
     holding_saver = Saver(name="HoldingSaver", file=holding_file, mode="w")
 
-    calculators = dict(strategy=strategy_calculator, valuation=valuation_calculator, holding=holding_calculator)
-    filters = dict(option=option_filter, valuation=valuation_filter)
+    calculators = dict(strategies=strategy_calculator, valuations=valuation_calculator, holdings=holding_calculator)
+    filters = dict(options=option_filter, valuations=valuation_filter)
 
     valuation_routine = Valuation(option_loader, valuation_writer, calculators=calculators, filters=filters)
     acquisition_routine = Acquisition(valuation_reader, holding_saver, calculators=calculators, filters=filters)

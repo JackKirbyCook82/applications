@@ -56,19 +56,14 @@ class ETradeMarket(object):
         self.symbols = symbols
 
     def __call__(self, *args, **kwargs):
-        for symbol in self.symbols:
-            source = (symbol,)
-            stocks = self.downloaders.stock(source, *args, **kwargs)
-            source = (source, stocks)
-            products = self.downloaders.product(source, *args, **kwargs)
+        for symbol in self.symbols(*args, **kwargs):
+            stocks = self.downloaders.stock(symbol, *args, **kwargs)
+            products = self.downloaders.product(symbol, stocks, *args, **kwargs)
             for product in products:
-                source = (product,)
-                options = self.downloaders.option(source, *args, **kwargs)
-                source = (product, options)
-                options = self.filters.option(source, *args, **kwargs)
+                options = self.downloaders.option(product, *args, **kwargs)
+                options = self.filters.option(product, options, *args, **kwargs)
                 if options is None: continue
-                source = (product, options)
-                self.savers.option(source, *args, **kwargs)
+                self.options(product, options, *args, **kwargs)
 
 
 def main(*args, arguments, parameters, **kwargs):
@@ -78,20 +73,20 @@ def main(*args, arguments, parameters, **kwargs):
     symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
-        symbol_dequeue = Dequeue(name="SymbolSource", queue=symbol_queue, query=Querys.Symbol)
+        symbol_dequeue = Dequeue(name="SymbolSource", queue=symbol_queue)
         stock_downloader = ETradeSecurityDownloader(name="StockDownloader", feed=reader, instrument=Variables.Instruments.STOCK)
         product_downloader = ETradeProductDownloader(name="ProductDownloader", feed=reader)
         option_downloader = ETradeSecurityDownloader(name="OptionDownloader", feed=reader, instrument=Variables.Instruments.OPTION)
         option_filter = Filter(name="OptionFilter", criterion=option_criterion)
         option_saver = Saver(name="OptionSaver", file=option_file, mode="a")
 
-        downloaders = dict(stock=stock_downloader, product=product_downloader, option=option_downloader)
-        filters = dict(option=option_filter)
+    downloaders = dict(stock=stock_downloader, product=product_downloader, option=option_downloader)
+    filters = dict(option=option_filter)
 
-        market_routine = ETradeMarket(symbol_dequeue, option_saver, downloaders=downloaders, filters=filters)
-        market_thread = RoutineThread(market_routine).setup(**parameters)
-        market_thread.start()
-        market_thread.join()
+    market_routine = ETradeMarket(symbol_dequeue, option_saver, downloaders=downloaders, filters=filters)
+    market_thread = RoutineThread(market_routine).setup(**parameters)
+    market_thread.start()
+    market_thread.join()
 
 
 if __name__ == "__main__":
