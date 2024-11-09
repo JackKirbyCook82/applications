@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Apr 19 2024
-@name:   Yahoo Trading Platform Downloader
+@name:   Yahoo History Downloader
 @author: Jack Kirby Cook
 
 """
@@ -22,10 +22,15 @@ CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from finance.variables import Querys, DateRange
+from yahoo.history import YahooTechnicalDownloader
+from finance.variables import Variables, Querys, DateRange
 from finance.technicals import BarsFile
 from webscraping.webdrivers import WebDriver, WebBrowser
-from support.files import FileTypes, FileTimings
+from support.pipelines import Producer, Processor, Consumer
+from support.files import Saver, FileTypes, FileTimings
+from support.queues import Dequeuer, QueueTypes, Queue
+from support.synchronize import RoutineThread
+from support.mixins import Carryover
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -34,15 +39,25 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10):
-    pass
+class SymbolDequeuerProducer(Dequeuer, Producer): pass
+class HistoryDownloaderProcessor(YahooTechnicalDownloader, Processor, Carryover, carryover="symbol", leading=True): pass
+class HistorySaverConsumer(Saver, Consumer): pass
+class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
 
 
 def main(*args, arguments, parameters, **kwargs):
     bars_file = BarsFile(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
+    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
 
     with YahooDriver(name="HistoryReader") as reader:
-        pass
+        symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
+        history_downloader = HistoryDownloaderProcessor(name="HistoryDownloader", feed=reader, instrument=Variables.Technicals.BARS)
+        history_saver = HistorySaverConsumer(name="HistorySaver", file=bars_file, mode="a")
+
+        history_pipeline = symbol_dequeue + history_downloader + history_saver
+        history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(**parameters)
+        history_thread.start()
+        history_thread.join()
 
 
 if __name__ == "__main__":

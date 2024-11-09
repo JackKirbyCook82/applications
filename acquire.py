@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jul 12 2023
-@name:   Trading Platform Acquisitions
+@name:   Acquisition Calculations
 @author: Jack Kirby Cook
 
 """
@@ -29,8 +29,9 @@ from finance.valuations import ValuationCalculator, ValuationWriter, ValuationRe
 from finance.holdings import HoldingCalculator, HoldingFile
 from support.files import Directory, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
+from support.pipelines import Producer, Processor, Consumer
 from support.filtering import Filter, Criterion
-from support.mixins import AttributeNode
+from support.mixins import Carryover
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -39,37 +40,18 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class Valuation(object):
-    def __init__(self, options, valuations, *args, calculators, filters, **kwargs):
-        self.calculators = AttributeNode(calculators)
-        self.filters = AttributeNode(filters)
-        self.valuations = valuations
-        self.options = options
-
-    def __call__(self, *args, **kwargs):
-        for contract, options in self.options(*args, **kwargs):
-            options = self.filters.options(contract, options, *args, **kwargs)
-            if options is None: continue
-            for strategies in self.calculators.strategies(contract, options, *args, **kwargs):
-                for valuations in self.calculators.valuations(contract, strategies, *args, **kwargs):
-                    valuations = self.filters.valuations(contract, valuations, *args, **kwargs)
-                    if valuations is None: continue
-                    self.valuations(contract, valuations, *args, **kwargs)
+class OptionDirectoryProducer(Directory, Producer): pass
+class OptionFilterProcessor(Filter, Processor, Carryover, carryover="query", leading=True): pass
+class StrategyCalculatorProcessor(StrategyCalculator, Processor, Carryover, carryover="contract", leading=True): pass
+class ValuationCalculatorProcessor(ValuationCalculator, Processor, Carryover, carryover="contract", leading=True): pass
+class ValuationFilterProcessor(Filter, Processor, Carryover, carryover="query", leading=True): pass
+class ValuationWriterConsumer(ValuationWriter, Consumer): pass
+class ValuationReaderProducer(ValuationReader, Producer): pass
+class HoldingCalculatorProcessor(HoldingCalculator, Processor, Carryover, carryover="contract", leading=True): pass
+class HoldingSaverConsumer(Saver, Consumer): pass
 
 
-class Acquisition(object):
-    def __init__(self, valuations, holdings, *args, calculators, **kwargs):
-        self.calculators = AttributeNode(calculators)
-        self.valuations = valuations
-        self.holdings = holdings
-
-    def __call__(self, *args, **kwargs):
-        for contract, valuations in self.valuations(*args, **kwargs):
-            holdings = self.calculators.holdings(contract, valuations, *args, **kwargs)
-            self.holdings(contract, holdings, *args, **kwargs)
-
-
-class Trading(object):
+class TradingProcess(object):
     def __init__(self, table, *args, discount, liquidity, capacity, **kwargs):
         self.liquidity = liquidity
         self.discount = discount
@@ -103,32 +85,30 @@ def main(*args, arguments, parameters, **kwargs):
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
 
-    option_loader = Directory(name="OptionLoader", file=option_file, query=Querys.Contract, mode="r")
-    option_filter = Filter(name="OptionFilter", criterion=option_criterion)
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=Variables.Strategies)
-    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    valuation_filter = Filter(name="ValuationFilter", criterion=valuation_criterion)
-    valuation_writer = ValuationWriter(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
-    valuation_reader = ValuationReader(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
-    holding_calculator = HoldingCalculator(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    holding_saver = Saver(name="HoldingSaver", file=holding_file, mode="w")
+    option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, query=Querys.Contract, mode="r")
+    option_filter = OptionFilterProcessor(name="OptionFilter", criterion=option_criterion)
+    strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
+    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=valuation_criterion)
+    valuation_writer = ValuationWriterConsumer(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
+    valuation_reader = ValuationReaderProducer(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
+    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
 
-    calculators = dict(strategies=strategy_calculator, valuations=valuation_calculator, holdings=holding_calculator)
-    filters = dict(options=option_filter, valuations=valuation_filter)
-
-    valuation_routine = Valuation(option_loader, valuation_writer, calculators=calculators, filters=filters)
-    acquisition_routine = Acquisition(valuation_reader, holding_saver, calculators=calculators, filters=filters)
-    trading_routine = Trading(acquisition_table, discount=arguments["discount"], liquidity=arguments["liquidity"], capacity=arguments["capacity"])
-    valuation_thread = RoutineThread(valuation_routine).setup(**parameters)
-    acquisition_thread = RepeatingThread(acquisition_routine, wait=10).setup(**parameters)
-    trading_thread = RepeatingThread(trading_routine, wait=10).setup(**parameters)
+    trading_process = TradingProcess(acquisition_table, discount=arguments["discount"], liquidity=arguments["liquidity"], capacity=arguments["capacity"])
+    valuation_pipeline = option_directory + option_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_writer
+    acquisition_pipeline = valuation_reader + holding_calculator + holding_saver
+    trading_thread = RepeatingThread(trading_process, name="TradingThread", wait=10).setup(**parameters)
+    valuation_thread = RoutineThread(valuation_pipeline, name="ValuationThread").setup(**parameters)
+    divestiture_thread = RepeatingThread(acquisition_pipeline, name="DivestitureThread", wait=10).setup(**parameters)
 
     trading_thread.start()
-    acquisition_thread.start()
+    divestiture_thread.start()
     valuation_thread.start()
     while True: time.sleep(10)
     valuation_thread.join()
-    acquisition_thread.join()
+    divestiture_thread.join()
+    trading_thread.join()
 
 
 if __name__ == "__main__":
@@ -138,10 +118,10 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
-    sysCurrent = Datetime(year=2024, month=10, day=9)
+    sysCurrent = Datetime(year=2024, month=11, day=6)
     sysParameters = dict(current=sysCurrent, discount=0.00, fees=0.00)
-    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100)
-    sysArguments = sysArguments | dict(discount=0.75, liquidity=100, capacity=1)
+    sysArguments = dict(apy=1.00, size=10, volume=100, interest=100)
+    sysArguments = sysArguments | dict(discount=2.00, liquidity=100, capacity=1)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jun 13 2024
-@name:   Trading Platform Divestitures
+@name:   Divestiture Calculations
 @author: Jack Kirby Cook
 
 """
@@ -33,9 +33,9 @@ from finance.orders import OrderCalculator
 from finance.stability import StabilityCalculator, StabilityFilter
 from finance.holdings import HoldingCalculator, HoldingFile
 from support.files import Directory, Loader, Saver, FileTypes, FileTimings
-from support.filtering import Filter, Criterion
 from support.synchronize import RepeatingThread
-from support.mixins import AttributeNode
+from support.filtering import Filter, Criterion
+from support.processes import Feed, Operation
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -44,49 +44,26 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class Valuation(object):
-    def __init__(self, holdings, bars, exposures, valuations, *args, calculators, filters, **kwargs):
-        self.calculators = AttributeNode(calculators)
-        self.filters = AttributeNode(filters)
-        self.valuations = valuations
-        self.exposures = exposures
-        self.holdings = holdings
-        self.bars = bars
-
-    def __call__(self, *args, **kwargs):
-        for contract, holdings in self.holdings(*args, **kwargs):
-            bars = self.bars(contract, *args, **kwargs)
-            assert bars is not None
-            statistics = self.calculators.statistics(contract, bars, *args, **kwargs)
-            exposures = self.calculators.exposures(contract, holdings, *args, **kwargs)
-            self.exposures(contract, exposures, *args, **kwargs)
-            options = self.calculators.options(contract, exposures, statistics, *args, **kwargs)
-            options = self.filters.options(contract, options, *args, **kwargs)
-            if options is None: continue
-            for strategies in self.calculators.strategies(contract, options, *args, **kwargs):
-                for valuations in self.calculators.valuations(contract, strategies, *args, **kwargs):
-                    valuations = self.filters.valuations(contract, valuations, *args, **kwargs)
-                    if valuations is None: continue
-                    orders = self.calculators.orders(contract, valuations, *args, **kwargs)
-                    stabilities = self.calculators.stabilities(contract, orders, exposures, *args, **kwargs)
-                    stabilities = self.filters.stablities(contract, valuations, stabilities, *args, **kwargs)
-                    if not stabilities: continue
-                    self.valuations(contract, valuations, *args, **kwargs)
+class HoldingDirectoryFeed(Directory, Feed, outlet=["contract", "holdings"]): pass
+class BarsLoaderOperation(Loader, Operation, inlet=["contract"], outlet=["bars"]): pass
+class StatisticCalculatorOperation(StabilityCalculator, Operation, inlet=["contract", "bars"], outlet=["statistics"]): pass
+class ExposureCalculatorOperation(ExposureCalculator, Operation, inlet=["contract", "holdings"], outlet=["exposures"]): pass
+class ExposureWriterOperation(ExposureWriter, Operation, inlet=["contract", "exposures"]): pass
+class OptionCalculatorOperation(OptionCalculator, Operation, inlet=["contract", "exposures", "statistics"], outlet=["options"]): pass
+class OptionFilterOperation(Filter, Operation, inlet=["contract", "options"], outlet=["options"]): pass
+class StrategyCalculatorOperation(StrategyCalculator, Operation, inlet=["contract", "options"], outlet=["strategies"]): pass
+class ValuationCalculatorOperation(ValuationWriter, Operation, inlet=["contract", "strategies"], outlet=["valuations"]): pass
+class ValuationFilterOperation(Filter, Operation, inlet=["contract", "valuations"], outlet=["valuations"]): pass
+class OrderCalculatorOperation(OrderCalculator, Operation, inlet=["contract", "valuations"], outlet=["orders"]): pass
+class StabilityCalculatorOperation(StabilityCalculator, Operation, inlet=["contract", "orders", "exposures"], outlet=["stabilities"]): pass
+class StabilityFilterOperation(StabilityFilter, Operation, inlet=["contract", "stabilities", "valuations"], outlet=["valuations"]): pass
+class ValuationWriterOperation(ValuationWriter, Operation, inlet=["contract", "valuations"]): pass
+class ValuationReaderFeed(ValuationReader, Feed, outlet=["contract", "valuations"]): pass
+class HoldingCalculatorOperation(HoldingCalculator, Operation, inlet=["contract", "valuations"], outlet=["holdings"]): pass
+class HoldingSaverOperation(Saver, Operation, inlet=["contract", "holdings"]): pass
 
 
-class Divestiture(object):
-    def __init__(self, valuations, holdings, *args, calculators, **kwargs):
-        self.calculators = AttributeNode(calculators)
-        self.valuations = valuations
-        self.holdings = holdings
-
-    def __call__(self, *args, **kwargs):
-        for contract, valuations in self.valuations(*args, **kwargs):
-            holdings = self.calculators.holdings(contract, valuations, *args, **kwargs)
-            self.holdings(contract, holdings, *args, **kwargs)
-
-
-class Trading(object):
+class TradingProcess(object):
     def __init__(self, table, *args, discount, liquidity, capacity, **kwargs):
         self.liquidity = liquidity
         self.discount = discount
@@ -123,9 +100,9 @@ def main(*args, arguments, parameters, **kwargs):
     divestiture_table = ValuationTable(name="DivestitureTable", valuation=Variables.Valuations.ARBITRAGE)
     exposure_table = ExposureTable(name="ExposureTable")
 
+    holding_directory = Directory(name="HoldingDirectory", file=holding_file, query=Querys.Contract, mode="r")
     bars_loader = Loader(name="BarsLoader", file=bars_file, query=Querys.Symbol, mode="r")
     statistic_calculator = TechnicalCalculator(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
-    holding_loader = Directory(name="HoldingLoader", file=holding_file, query=Querys.Contract, mode="r")
     exposure_calculator = ExposureCalculator(name="ExposureCalculator")
     exposure_writer = ExposureWriter(name="ExposureWriter", table=exposure_table)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Pricing.BLACKSCHOLES, sizings=sizing_functions, timings=timing_functions)
@@ -141,19 +118,22 @@ def main(*args, arguments, parameters, **kwargs):
     holding_calculator = HoldingCalculator(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
     holding_saver = Saver(name="HoldingSaver", file=holding_file, mode="a")
 
-    calculators = dict(statistics=statistic_calculator, holdings=holding_calculator, orders=order_calculator, stabilities=stability_calculator)
-    calculators = calculators | dict(exposures=exposure_calculator, options=option_calculator, strategies=strategy_calculator, valuations=valuation_calculator)
-    filters = dict(options=option_filter, valuations=valuation_filter, stabilities=stability_filter)
+    trading_process = TradingProcess(divestiture_table, discount=arguments["discount"], liquidity=arguments["liquidity"], capacity=arguments["capacity"])
+    valuation_process = holding_directory + bars_loader + statistic_calculator + exposure_calculator + exposure_writer
+    valuation_process = valuation_process + option_calculator + option_filter + strategy_calculator + valuation_calculator, valuation_filter
+    valuation_process = valuation_process + order_calculator, stability_calculator, stability_filter, valuation_writer
+    divestiture_process = valuation_reader + holding_calculator + holding_saver
+    trading_thread = RepeatingThread(trading_process, name="TradingThread", wait=10).setup(**parameters)
+    valuation_thread = RepeatingThread(valuation_process, name="ValuationThread", wait=10).setup(**parameters)
+    divestiture_thread = RepeatingThread(divestiture_process, name="DivestitureThread", wait=10).setup(**parameters)
 
-    valuation_routine = Valuation(holding_loader, bars_loader, exposure_writer, valuation_writer, calculators=calculators, filters=filters)
-    acquisition_routine = Divestiture(valuation_reader, holding_saver, calculators=calculators, filters=filters)
-    trading_routine = Trading(divestiture_table, discount=arguments["discount"], liquidity=arguments["liquidity"], capacity=arguments["capacity"])
-    valuation_thread = RepeatingThread(valuation_routine).setup(**parameters)
-    acquisition_thread = RepeatingThread(acquisition_routine, wait=10).setup(**parameters)
-    trading_thread = RepeatingThread(trading_routine, wait=10).setup(**parameters)
-
+    trading_thread.start()
+    divestiture_thread.start()
     valuation_thread.start()
+    while True: time.sleep(10)
     valuation_thread.join()
+    divestiture_thread.join()
+    trading_thread.join()
 
 
 if __name__ == "__main__":
@@ -165,8 +145,8 @@ if __name__ == "__main__":
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=10, day=9)
     sysParameters = dict(current=sysCurrent, discount=0.00, fees=0.00)
-    sysArguments = dict(apy=0.50, size=10, volume=100, interest=100)
-    sysArguments = sysArguments | dict(discount=0.75, liquidity=100, capacity=1)
+    sysArguments = dict(apy=0.00, size=10, volume=100, interest=100)
+    sysArguments = sysArguments | dict(discount=0.25, liquidity=100, capacity=1)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

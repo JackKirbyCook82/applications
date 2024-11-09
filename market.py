@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Weds Jul 12 2023
-@name:   ETrade Trading Platform Downloader
+@name:   ETrade Market Downloader
 @author: Jack Kirby Cook
 
 """
@@ -22,15 +22,16 @@ API = os.path.join(ROOT, "applications", "api.txt")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from etrade.market import ETradeProductDownloader, ETradeSecurityDownloader
-from finance.variables import Variables, Querys, DateRange
+from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
+from finance.variables import Querys, DateRange
 from finance.securities import OptionFile
 from webscraping.webreaders import WebAuthorizer, WebReader
+from support.pipelines import Producer, Processor, Consumer
 from support.files import Saver, FileTypes, FileTimings
+from support.queues import Dequeuer, QueueTypes, Queue
 from support.filtering import Filter, Criterion
 from support.synchronize import RoutineThread
-from support.queues import Dequeue, QueueTypes, Queue
-from support.mixins import AttributeNode
+from support.mixins import Carryover
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -45,25 +46,14 @@ access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
 
+class SymbolDequeuerProducer(Dequeuer, Producer): pass
+class StockDownloaderProcessor(ETradeStockDownloader, Processor, Carryover, carryover="symbol", leading=True): pass
+class ProductDownloaderProcessor(ETradeProductDownloader, Processor): pass
+class OptionDownloaderProcessor(ETradeOptionDownloader, Processor, Carryover, carryover="product", leading=True): pass
+class OptionFilterProcessor(Filter, Processor, Carryover, carryover="product", leading=True): pass
+class OptionSaverConsumer(Saver, Consumer): pass
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-
-class ETradeMarket(object):
-    def __init__(self, symbols, options, *args, downloaders, filters, **kwargs):
-        self.downloaders = AttributeNode(downloaders)
-        self.filters = AttributeNode(filters)
-        self.options = options
-        self.symbols = symbols
-
-    def __call__(self, *args, **kwargs):
-        for symbol in self.symbols(*args, **kwargs):
-            stocks = self.downloaders.stock(symbol, *args, **kwargs)
-            products = self.downloaders.product(symbol, stocks, *args, **kwargs)
-            for product in products:
-                options = self.downloaders.option(product, *args, **kwargs)
-                options = self.filters.option(product, options, *args, **kwargs)
-                if options is None: continue
-                self.options(product, options, *args, **kwargs)
 
 
 def main(*args, arguments, parameters, **kwargs):
@@ -73,20 +63,17 @@ def main(*args, arguments, parameters, **kwargs):
     symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
-        symbol_dequeue = Dequeue(name="SymbolSource", queue=symbol_queue)
-        stock_downloader = ETradeSecurityDownloader(name="StockDownloader", feed=reader, instrument=Variables.Instruments.STOCK)
-        product_downloader = ETradeProductDownloader(name="ProductDownloader", feed=reader)
-        option_downloader = ETradeSecurityDownloader(name="OptionDownloader", feed=reader, instrument=Variables.Instruments.OPTION)
-        option_filter = Filter(name="OptionFilter", criterion=option_criterion)
-        option_saver = Saver(name="OptionSaver", file=option_file, mode="a")
+        symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
+        stock_downloader = StockDownloaderProcessor(name="StockDownloader", feed=reader)
+        product_downloader = ProductDownloaderProcessor(name="ProductDownloader", feed=reader)
+        option_downloader = OptionDownloaderProcessor(name="OptionDownloader", feed=reader)
+        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=option_criterion)
+        option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a")
 
-    downloaders = dict(stock=stock_downloader, product=product_downloader, option=option_downloader)
-    filters = dict(option=option_filter)
-
-    market_routine = ETradeMarket(symbol_dequeue, option_saver, downloaders=downloaders, filters=filters)
-    market_thread = RoutineThread(market_routine).setup(**parameters)
-    market_thread.start()
-    market_thread.join()
+        market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_filter + option_saver
+        market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(**parameters)
+        market_thread.start()
+        market_thread.join()
 
 
 if __name__ == "__main__":
