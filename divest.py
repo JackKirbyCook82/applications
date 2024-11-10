@@ -35,7 +35,7 @@ from finance.holdings import HoldingCalculator, HoldingFile
 from support.files import Directory, Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RepeatingThread
 from support.filtering import Filter, Criterion
-from support.processes import Feed, Operation
+from support.processes import Source, Process
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -44,23 +44,23 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class HoldingDirectoryFeed(Directory, Feed, outlet=["contract", "holdings"]): pass
-class BarsLoaderOperation(Loader, Operation, inlet=["contract"], outlet=["bars"]): pass
-class StatisticCalculatorOperation(StabilityCalculator, Operation, inlet=["contract", "bars"], outlet=["statistics"]): pass
-class ExposureCalculatorOperation(ExposureCalculator, Operation, inlet=["contract", "holdings"], outlet=["exposures"]): pass
-class ExposureWriterOperation(ExposureWriter, Operation, inlet=["contract", "exposures"]): pass
-class OptionCalculatorOperation(OptionCalculator, Operation, inlet=["contract", "exposures", "statistics"], outlet=["options"]): pass
-class OptionFilterOperation(Filter, Operation, inlet=["contract", "options"], outlet=["options"]): pass
-class StrategyCalculatorOperation(StrategyCalculator, Operation, inlet=["contract", "options"], outlet=["strategies"]): pass
-class ValuationCalculatorOperation(ValuationWriter, Operation, inlet=["contract", "strategies"], outlet=["valuations"]): pass
-class ValuationFilterOperation(Filter, Operation, inlet=["contract", "valuations"], outlet=["valuations"]): pass
-class OrderCalculatorOperation(OrderCalculator, Operation, inlet=["contract", "valuations"], outlet=["orders"]): pass
-class StabilityCalculatorOperation(StabilityCalculator, Operation, inlet=["contract", "orders", "exposures"], outlet=["stabilities"]): pass
-class StabilityFilterOperation(StabilityFilter, Operation, inlet=["contract", "stabilities", "valuations"], outlet=["valuations"]): pass
-class ValuationWriterOperation(ValuationWriter, Operation, inlet=["contract", "valuations"]): pass
-class ValuationReaderFeed(ValuationReader, Feed, outlet=["contract", "valuations"]): pass
-class HoldingCalculatorOperation(HoldingCalculator, Operation, inlet=["contract", "valuations"], outlet=["holdings"]): pass
-class HoldingSaverOperation(Saver, Operation, inlet=["contract", "holdings"]): pass
+class HoldingDirectorySource(Directory, Source, variables=["contract", "holdings"]): pass
+class BarsLoaderProcess(Loader, Process, domain=["contract"], results=["bars"]): pass
+class StatisticCalculatorProcess(TechnicalCalculator, Process, domain=["contract", "bars"], results=["statistics"]): pass
+class ExposureCalculatorProcess(ExposureCalculator, Process, domain=["contract", "holdings"], results=["exposures"]): pass
+class ExposureWriterProcess(ExposureWriter, Process, domain=["contract", "exposures"]): pass
+class OptionCalculatorProcess(OptionCalculator, Process, domain=["contract", "exposures", "statistics"], results=["options"]): pass
+class OptionFilterOperation(Filter, Process, domain=["contract", "options"], results=["options"]): pass
+class StrategyCalculatorProcess(StrategyCalculator, Process, domain=["contract", "options"], results=["strategies"]): pass
+class ValuationCalculatorProcess(ValuationCalculator, Process, domain=["contract", "strategies"], results=["valuations"]): pass
+class ValuationFilterProcess(Filter, Process, domain=["contract", "valuations"], results=["valuations"]): pass
+class OrderCalculatorProcess(OrderCalculator, Process, domain=["contract", "valuations"], results=["orders"]): pass
+class StabilityCalculatorProcess(StabilityCalculator, Process, domain=["contract", "orders", "exposures"], results=["stabilities"]): pass
+class StabilityFilterProcess(StabilityFilter, Process, domain=["contract", "stabilities", "valuations"], results=["valuations"]): pass
+class ValuationWriterProcess(ValuationWriter, Process, domain=["contract", "valuations"]): pass
+class ValuationReaderSource(ValuationReader, Source, variables=["contract", "valuations"]): pass
+class HoldingCalculatorProcess(HoldingCalculator, Process, domain=["contract", "valuations"], results=["holdings"]): pass
+class HoldingSaverProcess(Saver, Process, domain=["contract", "holdings"]): pass
 
 
 class TradingProcess(object):
@@ -100,23 +100,23 @@ def main(*args, arguments, parameters, **kwargs):
     divestiture_table = ValuationTable(name="DivestitureTable", valuation=Variables.Valuations.ARBITRAGE)
     exposure_table = ExposureTable(name="ExposureTable")
 
-    holding_directory = Directory(name="HoldingDirectory", file=holding_file, query=Querys.Contract, mode="r")
-    bars_loader = Loader(name="BarsLoader", file=bars_file, query=Querys.Symbol, mode="r")
-    statistic_calculator = TechnicalCalculator(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
-    exposure_calculator = ExposureCalculator(name="ExposureCalculator")
-    exposure_writer = ExposureWriter(name="ExposureWriter", table=exposure_table)
-    option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Pricing.BLACKSCHOLES, sizings=sizing_functions, timings=timing_functions)
-    option_filter = Filter(name="OptionFilter", criterion=option_criterion)
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=Variables.Strategies)
-    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    valuation_filter = Filter(name="ValuationFilter", criterion=valuation_criterion)
-    order_calculator = OrderCalculator(name="OrderCalculator")
-    stability_calculator = StabilityCalculator(name="StabilityCalculator")
-    stability_filter = StabilityFilter(name="StabilityFilter")
-    valuation_writer = ValuationWriter(name="ValuationWriter", table=divestiture_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
-    valuation_reader = ValuationReader(name="ValuationReader", table=divestiture_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
-    holding_calculator = HoldingCalculator(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    holding_saver = Saver(name="HoldingSaver", file=holding_file, mode="a")
+    holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, query=Querys.Contract, mode="r")
+    bars_loader = BarsLoaderProcess(name="BarsLoader", file=bars_file, query=Querys.Symbol, mode="r")
+    statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
+    exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
+    exposure_writer = ExposureWriterProcess(name="ExposureWriter", table=exposure_table)
+    option_calculator = OptionCalculatorProcess(name="OptionCalculator", pricing=Variables.Pricing.BLACKSCHOLES, sizings=sizing_functions, timings=timing_functions)
+    option_filter = OptionFilterOperation(name="OptionFilter", criterion=option_criterion)
+    strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=Variables.Strategies)
+    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=valuation_criterion)
+    order_calculator = OrderCalculatorProcess(name="OrderCalculator")
+    stability_calculator = StabilityCalculatorProcess(name="StabilityCalculator")
+    stability_filter = StabilityFilterProcess(name="StabilityFilter")
+    valuation_writer = ValuationWriterProcess(name="ValuationWriter", table=divestiture_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
+    valuation_reader = ValuationReaderSource(name="ValuationReader", table=divestiture_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
+    holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a")
 
     trading_process = TradingProcess(divestiture_table, discount=arguments["discount"], liquidity=arguments["liquidity"], capacity=arguments["capacity"])
     valuation_process = holding_directory + bars_loader + statistic_calculator + exposure_calculator + exposure_writer
