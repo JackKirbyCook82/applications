@@ -44,22 +44,22 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class HoldingDirectorySource(Directory, Source, variables=["contract", "holdings"]): pass
-class BarsLoaderProcess(Loader, Process, domain=["contract"], results=["bars"]): pass
-class StatisticCalculatorProcess(TechnicalCalculator, Process, domain=["contract", "bars"], results=["statistics"]): pass
-class ExposureCalculatorProcess(ExposureCalculator, Process, domain=["contract", "holdings"], results=["exposures"]): pass
+class HoldingDirectorySource(Directory, Source, arguments=["contract", "holdings"]): pass
+class BarsLoaderProcess(Loader, Process, domain=["contract"], arguments=["bars"]): pass
+class StatisticCalculatorProcess(TechnicalCalculator, Process, domain=["contract", "bars"], arguments=["statistics"]): pass
+class ExposureCalculatorProcess(ExposureCalculator, Process, domain=["contract", "holdings"], arguments=["exposures"]): pass
 class ExposureWriterProcess(ExposureWriter, Process, domain=["contract", "exposures"]): pass
-class OptionCalculatorProcess(OptionCalculator, Process, domain=["contract", "exposures", "statistics"], results=["options"]): pass
-class OptionFilterOperation(Filter, Process, domain=["contract", "options"], results=["options"]): pass
-class StrategyCalculatorProcess(StrategyCalculator, Process, domain=["contract", "options"], results=["strategies"]): pass
-class ValuationCalculatorProcess(ValuationCalculator, Process, domain=["contract", "strategies"], results=["valuations"]): pass
-class ValuationFilterProcess(Filter, Process, domain=["contract", "valuations"], results=["valuations"]): pass
-class OrderCalculatorProcess(OrderCalculator, Process, domain=["contract", "valuations"], results=["orders"]): pass
-class StabilityCalculatorProcess(StabilityCalculator, Process, domain=["contract", "orders", "exposures"], results=["stabilities"]): pass
-class StabilityFilterProcess(StabilityFilter, Process, domain=["contract", "stabilities", "valuations"], results=["valuations"]): pass
+class OptionCalculatorProcess(OptionCalculator, Process, domain=["contract", "exposures", "statistics"], arguments=["options"]): pass
+class OptionFilterOperation(Filter, Process, domain=["contract", "options"], arguments=["options"]): pass
+class StrategyCalculatorProcess(StrategyCalculator, Process, domain=["contract", "options"], arguments=["strategies"]): pass
+class ValuationCalculatorProcess(ValuationCalculator, Process, domain=["contract", "strategies"], arguments=["valuations"]): pass
+class ValuationFilterProcess(Filter, Process, domain=["contract", "valuations"], arguments=["valuations"]): pass
+class OrderCalculatorProcess(OrderCalculator, Process, domain=["contract", "valuations"], arguments=["orders"]): pass
+class StabilityCalculatorProcess(StabilityCalculator, Process, domain=["contract", "orders", "exposures"], arguments=["stabilities"]): pass
+class StabilityFilterProcess(StabilityFilter, Process, domain=["contract", "stabilities", "valuations"], arguments=["valuations"]): pass
 class ValuationWriterProcess(ValuationWriter, Process, domain=["contract", "valuations"]): pass
-class ValuationReaderSource(ValuationReader, Source, variables=["contract", "valuations"]): pass
-class HoldingCalculatorProcess(HoldingCalculator, Process, domain=["contract", "valuations"], results=["holdings"]): pass
+class ValuationReaderSource(ValuationReader, Source, arguments=["contract", "valuations"]): pass
+class HoldingCalculatorProcess(HoldingCalculator, Process, domain=["contract", "valuations"], arguments=["holdings"]): pass
 class HoldingSaverProcess(Saver, Process, domain=["contract", "holdings"]): pass
 
 

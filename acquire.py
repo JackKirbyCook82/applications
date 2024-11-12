@@ -52,14 +52,14 @@ __license__ = "MIT License"
 
 
 from support.processes import Source, Process
-class OptionDirectorySource(Directory, Source, variables=["contract", "options"]): pass
-class OptionFilterProcess(Filter, Process, domain=["contract", "options"], results=["options"]): pass
-class StrategyCalculatorProcess(StrategyCalculator, Process, domain=["contract", "options"], results=["strategies"]): pass
-class ValuationCalculatorProcess(ValuationCalculator, Process, domain=["contract", "strategies"], results=["valuations"]): pass
-class ValuationFilterProcess(Filter, Process, Carryover, domain=["contract", "valuations"], results=["valuations"]): pass
+class OptionDirectorySource(Directory, Source, arguments=["contract", "options"]): pass
+class OptionFilterProcess(Filter, Process, domain=["contract", "options"], arguments=["options"]): pass
+class StrategyCalculatorProcess(StrategyCalculator, Process, domain=["contract", "options"], arguments=["strategies"]): pass
+class ValuationCalculatorProcess(ValuationCalculator, Process, domain=["contract", "strategies"], arguments=["valuations"]): pass
+class ValuationFilterProcess(Filter, Process, Carryover, domain=["contract", "valuations"], arguments=["valuations"]): pass
 class ValuationWriterProcess(ValuationWriter, Process, domain=["contract", "valuations"]): pass
-class ValuationReaderSource(ValuationReader, Source, variables=["contract", "valuations"]): pass
-class HoldingCalculatorProcess(HoldingCalculator, Process, domain=["contract", "valuations"], results=["holdings"]): pass
+class ValuationReaderSource(ValuationReader, Source, arguments=["contract", "valuations"]): pass
+class HoldingCalculatorProcess(HoldingCalculator, Process, domain=["contract", "valuations"], arguments=["holdings"]): pass
 class HoldingSaverProcess(Saver, Process, domain=["contract", "holdings"]): pass
 
 
@@ -93,24 +93,25 @@ def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     valuation_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
+    valuation_combination = lambda valuations: pd.concat(valuations, axis=1)
     option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
 
-#    option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, query=Querys.Contract, mode="r")
-#    option_filter = OptionFilterProcessor(name="OptionFilter", criterion=option_criterion)
-#    strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
-#    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-#    valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=valuation_criterion)
-#    valuation_writer = ValuationWriterConsumer(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
-#    valuation_reader = ValuationReaderProducer(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
-#    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
-#    holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
+    # option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, query=Querys.Contract, mode="r")
+    # option_filter = OptionFilterProcessor(name="OptionFilter", criterion=option_criterion)
+    # strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
+    # valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    # valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=valuation_criterion)
+    # valuation_writer = ValuationWriterConsumer(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
+    # valuation_reader = ValuationReaderProducer(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
+    # holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    # holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
 
     option_directory = OptionDirectorySource(name="OptionDirectory", file=option_file, query=Querys.Contract, mode="r")
     option_filter = OptionFilterProcess(name="OptionFilter", criterion=option_criterion)
     strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=Variables.Strategies)
-    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, combination=valuation_combination)
     valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=valuation_criterion)
     valuation_writer = ValuationWriterProcess(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
     valuation_reader = ValuationReaderSource(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
