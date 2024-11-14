@@ -93,7 +93,6 @@ def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     valuation_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    valuation_combination = lambda valuations: pd.concat(valuations, axis=1)
     option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
     acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
@@ -111,7 +110,7 @@ def main(*args, arguments, parameters, **kwargs):
     option_directory = OptionDirectorySource(name="OptionDirectory", file=option_file, query=Querys.Contract, mode="r")
     option_filter = OptionFilterProcess(name="OptionFilter", criterion=option_criterion)
     strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=Variables.Strategies)
-    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, combination=valuation_combination)
+    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, combine=pd.concat)
     valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=valuation_criterion)
     valuation_writer = ValuationWriterProcess(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
     valuation_reader = ValuationReaderSource(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
