@@ -23,7 +23,7 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
-from finance.variables import Querys, DateRange
+from finance.variables import Querys
 from finance.securities import OptionFile
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.pipelines import Producer, Processor, Consumer
@@ -31,7 +31,7 @@ from support.files import Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, QueueTypes, Queue
 from support.filtering import Filter, Criterion
 from support.synchronize import RoutineThread
-from support.mixins import Carryover
+from support.variables import DateRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -45,13 +45,13 @@ request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
-
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
-class StockDownloaderProcessor(ETradeStockDownloader, Processor, Carryover, carryover="symbol", leading=True): pass
+class StockDownloaderProcessor(ETradeStockDownloader, Processor): pass
 class ProductDownloaderProcessor(ETradeProductDownloader, Processor): pass
-class OptionDownloaderProcessor(ETradeOptionDownloader, Processor, Carryover, carryover="product", leading=True): pass
-class OptionFilterProcessor(Filter, Processor, Carryover, carryover="product", leading=True): pass
-class OptionSaverConsumer(Saver, Consumer): pass
+class OptionDownloaderProcessor(ETradeOptionDownloader, Processor): pass
+class OptionFilterProcessor(Filter, Processor): pass
+class OptionSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
+
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
 
@@ -59,8 +59,8 @@ class ETradeReader(WebReader, delay=10): pass
 def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
-    option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
+    symbol_queue = Queue(name="SymbolQueue", queuetype=QueueTypes.FIFO, contents=arguments["symbols"], capacity=None, timeout=None)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)

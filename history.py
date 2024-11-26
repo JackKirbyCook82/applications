@@ -23,14 +23,14 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from yahoo.history import YahooTechnicalDownloader
-from finance.variables import Variables, Querys, DateRange
+from finance.variables import Variables, Querys
 from finance.technicals import BarsFile
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
-from support.files import Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, QueueTypes, Queue
+from support.files import Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread
-from support.mixins import Carryover
+from support.variables import DateRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -40,14 +40,16 @@ __license__ = "MIT License"
 
 
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
-class HistoryDownloaderProcessor(YahooTechnicalDownloader, Processor, Carryover, carryover="symbol", leading=True): pass
-class HistorySaverConsumer(Saver, Consumer): pass
-class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
+class HistoryDownloaderProcessor(YahooTechnicalDownloader, Processor): pass
+class HistorySaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
+
+class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10):
+    pass
 
 
 def main(*args, arguments, parameters, **kwargs):
-    bars_file = BarsFile(name="BarsFile", repository=HISTORY, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    bars_file = BarsFile(name="BarsFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=HISTORY)
+    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", queuetype=QueueTypes.FIFO, contents=arguments["symbols"], capacity=None, timeout=None)
 
     with YahooDriver(name="HistoryReader") as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)

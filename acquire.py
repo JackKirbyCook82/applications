@@ -25,13 +25,13 @@ if ROOT not in sys.path:
 from finance.variables import Variables, Querys
 from finance.securities import OptionFile
 from finance.strategies import StrategyCalculator
-from finance.valuations import ValuationCalculator, ValuationWriter, ValuationReader, ValuationTable
+from finance.valuations import ValuationCalculator
+from finance.prospects import ProspectCalculator, ProspectWriter, ProspectReader, ProspectTable, ProspectView, ProspectFormatting, ProspectHeader
 from finance.holdings import HoldingCalculator, HoldingFile
-from support.files import Directory, Saver, FileTypes, FileTimings
+from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
 from support.filtering import Filter, Criterion
-from support.mixins import Carryover
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -40,75 +40,52 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class OptionDirectoryProducer(Directory, Producer): pass
-class OptionFilterProcessor(Filter, Processor, Carryover, carryover="query", leading=True): pass
-class StrategyCalculatorProcessor(StrategyCalculator, Processor, Carryover, carryover="contract", leading=True): pass
-class ValuationCalculatorProcessor(ValuationCalculator, Processor, Carryover, carryover="contract", leading=True): pass
-class ValuationFilterProcessor(Filter, Processor, Carryover, carryover="query", leading=True): pass
-class ValuationWriterConsumer(ValuationWriter, Consumer): pass
-class ValuationReaderProducer(ValuationReader, Producer): pass
-class HoldingCalculatorProcessor(HoldingCalculator, Processor, Carryover, carryover="contract", leading=True): pass
-class HoldingSaverConsumer(Saver, Consumer): pass
-
-
-class TradingProcess(object):
-    def __init__(self, table, *args, discount, liquidity, capacity, **kwargs):
-        self.liquidity = liquidity
-        self.discount = discount
-        self.capacity = capacity
-        self.table = table
-
-    def __call__(self, *args, **kwargs):
-        if not bool(self.table): return
-        with self.table.mutex:
-            pursue = self.status(Variables.Status.PROSPECT) & (self.table[:, "priority"] >= self.discount)
-            pursue = self.limit(pursue)
-            abandon = self.status(Variables.Status.PROSPECT) & (self.table[:, "priority"] < self.discount)
-            accepted = self.status(Variables.Status.PENDING) & (self.table[:, "size"] >= self.liquidity)
-            rejected = self.status(Variables.Status.PENDING) & (self.table[:, "size"] < self.liquidity)
-            self.table.change(rejected, "status", Variables.Status.REJECTED)
-            self.table.change(accepted, "status", Variables.Status.ACCEPTED)
-            self.table.change(abandon, "status", Variables.Status.ABANDONED)
-            self.table.change(pursue, "status", Variables.Status.PENDING)
-
-    def status(self, status): return self.table[:, "status"] == status
-    def limit(self, mask): return (mask.cumsum() < self.capacity + 1) & mask
+class OptionLoaderProducer(Loader, Producer, query=Querys.Contract): pass
+class OptionFilterProcessor(Filter, Processor): pass
+class StrategyCalculatorProcessor(StrategyCalculator, Processor): pass
+class ValuationCalculatorProcessor(ValuationCalculator, Processor): pass
+class ValuationFilterProcessor(Filter, Processor): pass
+class ProspectCalculatorProcessor(ProspectCalculator, Processor): pass
+class ProspectWriterConsumer(ProspectWriter, Consumer): pass
+class ProspectReaderProducer(ProspectReader, Producer): pass
+class HoldingCalculatorProcessor(HoldingCalculator, Processor): pass
+class HoldingSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
 
 
 def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
     valuation_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    option_file = OptionFile(name="OptionFile", repository=MARKET, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO, filetype=FileTypes.CSV, filetiming=FileTimings.EAGER)
-    acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
+    option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
+    holding_file = HoldingFile(name="HoldingFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=PORTFOLIO)
+    acquisition_formatting = ProspectFormatting(name="AcquisitionFormatting", valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_view = ProspectView(name="AcquisitionView", formatting=acquisition_formatting)
+    acquisition_table = ProspectTable(name="AcquisitionTable", view=acquisition_view, header=acquisition_header)
 
-    option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, query=Querys.Contract, mode="r")
+    option_loader = OptionLoaderProducer(name="OptionDirectory", file=option_file, mode="r")
     option_filter = OptionFilterProcessor(name="OptionFilter", criterion=option_criterion)
     strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
-    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", header=acquisition_header)
     valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=valuation_criterion)
-    valuation_writer = ValuationWriterConsumer(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
-    valuation_reader = ValuationReaderProducer(name="ValuationReader", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
-    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    prospect_calculator = ProspectCalculatorProcessor(name="ProspectCalculator", priority=valuation_priority)
+    prospect_writer = ProspectWriterConsumer(name="ProspectWriter", table=acquisition_table)
+    prospect_reader = ProspectReaderProducer(name="ProspectReader", table=acquisition_table)
+    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", header=acquisition_header)
     holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
 
-    trading_process = TradingProcess(acquisition_table, discount=arguments["discount"], liquidity=arguments["liquidity"], capacity=arguments["capacity"])
-    valuation_process = option_directory + option_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_writer
-    acquisition_process = valuation_reader + holding_calculator + holding_saver
-    trading_thread = RepeatingThread(trading_process, name="TradingThread", wait=10).setup(**parameters)
+    valuation_process = option_loader + option_filter + strategy_calculator + valuation_calculator + valuation_filter + prospect_calculator + prospect_writer
+    acquisition_process = prospect_reader + holding_calculator + holding_saver
     valuation_thread = RoutineThread(valuation_process, name="ValuationThread").setup(**parameters)
-    divestiture_thread = RepeatingThread(acquisition_process, name="DivestitureThread", wait=10).setup(**parameters)
+    acquisition_thread = RepeatingThread(acquisition_process, name="DivestitureThread", wait=10).setup(**parameters)
 
-    trading_thread.start()
-    divestiture_thread.start()
+    acquisition_thread.start()
     valuation_thread.start()
     while True:
         if bool(acquisition_table): print(acquisition_table)
         time.sleep(10)
     valuation_thread.join()
-    divestiture_thread.join()
-    trading_thread.join()
+    acquisition_thread.join()
 
 
 if __name__ == "__main__":
