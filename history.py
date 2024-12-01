@@ -27,7 +27,7 @@ from finance.variables import Variables, Querys
 from finance.technicals import BarsFile
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
-from support.queues import Dequeuer, QueueTypes, Queue
+from support.queues import Dequeuer, Queue
 from support.files import Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread
 from support.variables import DateRange
@@ -49,7 +49,7 @@ class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay
 
 def main(*args, arguments, parameters, **kwargs):
     bars_file = BarsFile(name="BarsFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=HISTORY)
-    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", queuetype=QueueTypes.FIFO, contents=arguments["symbols"], capacity=None, timeout=None)
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
 
     with YahooDriver(name="HistoryReader") as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)

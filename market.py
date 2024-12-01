@@ -28,7 +28,7 @@ from finance.securities import OptionFile
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.pipelines import Producer, Processor, Consumer
 from support.files import Saver, FileTypes, FileTimings
-from support.queues import Dequeuer, QueueTypes, Queue
+from support.queues import Dequeuer, Queue
 from support.filtering import Filter, Criterion
 from support.synchronize import RoutineThread
 from support.variables import DateRange
@@ -60,7 +60,7 @@ def main(*args, arguments, parameters, **kwargs):
     option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
     option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
-    symbol_queue = Queue(name="SymbolQueue", queuetype=QueueTypes.FIFO, contents=arguments["symbols"], capacity=None, timeout=None)
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
