@@ -47,9 +47,9 @@ class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay
     pass
 
 
-def main(*args, arguments, parameters, **kwargs):
+def main(symbols, *args, parameters={}, **kwargs):
     bars_file = BarsFile(name="BarsFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=HISTORY)
-    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=symbols, capacity=None, timeout=None)
 
     with YahooDriver(name="HistoryReader") as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
@@ -73,9 +73,8 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
-    sysArguments = dict(symbols=sysSymbols)
     sysParameters = dict(dates=sysDates, period=252)
-    main(arguments=sysArguments, parameters=sysParameters)
+    main(sysSymbols, parameters=sysParameters)
 
 
 

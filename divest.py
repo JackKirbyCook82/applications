@@ -64,8 +64,9 @@ class HoldingSaverProcess(Saver, Process, query=Querys.Contract): pass
 
 
 def main(*args, arguments, parameters, **kwargs):
-    option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
-    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
+#    option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
+#    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
+
     option_sizing = lambda cols: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}
     valuation_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     bars_file = BarsFile(name="BarsFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=HISTORY)
@@ -74,14 +75,13 @@ def main(*args, arguments, parameters, **kwargs):
 
     bars_loader = BarsLoaderProcess(name="BarsLoader", file=bars_file, mode="r")
     statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
-
     holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, mode="r")
     exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
     option_calculator = OptionCalculatorProcess(name="OptionCalculator", pricing=Variables.Pricing.BLACKSCHOLES, sizing=option_sizing)
-    option_filter = OptionFilterOperation(name="OptionFilter", criterion=option_criterion)
+#    option_filter = OptionFilterOperation(name="OptionFilter", criterion=option_criterion)
     strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=Variables.Strategies)
     valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", header=divestiture_table.header, combine=pd.concat)
-    valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=valuation_criterion)
+#    valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=valuation_criterion)
     prospect_calculator = ProspectCalculatorProcess(name="ProspectCalculator", priority=valuation_priority)
     order_calculator = OrderCalculatorProcess(name="OrderCalculator")
     stability_calculator = StabilityCalculatorProcess(name="StabilityCalculator")
@@ -90,19 +90,6 @@ def main(*args, arguments, parameters, **kwargs):
     prospect_reader = ProspectReaderSource(name="ProspectReader", table=divestiture_table)
     holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator", header=divestiture_table.header)
     holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a")
-
-    valuation_process =
-    divestiture_process =
-    valuation_thread = RepeatingThread(valuation_process, name="ValuationThread", wait=10).setup(**parameters)
-    divestiture_thread = RepeatingThread(divestiture_process, name="DivestitureThread", wait=10).setup(**parameters)
-
-    divestiture_thread.start()
-    valuation_thread.start()
-    while True:
-        if bool(divestiture_table): print(divestiture_table)
-        time.sleep(10)
-    valuation_thread.join()
-    divestiture_thread.join()
 
 
 if __name__ == "__main__":
