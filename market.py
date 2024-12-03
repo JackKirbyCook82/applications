@@ -11,7 +11,6 @@ import sys
 import logging
 import warnings
 import pandas as pd
-from functools import reduce
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
@@ -56,14 +55,15 @@ class OptionSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-
 class ETradeAPI(ntuple("API", "key code")): pass
-class ETradeCriterion(ntuple("Criterion", "sizing")):
+
+
+class MarketCriterion(ntuple("Criterion", "sizing")):
     Sizing = ntuple("Sizing", "size volume interest")
 
-    def __new__(cls, *args, sizing, **kwargs):
+    def __new__(cls, *args, sizing, profit, **kwargs):
         sizing = cls.Sizing(*[sizing[field] for field in cls.Sizing._fields])
-        return cls(sizing)
+        return super().__new__(cls, sizing)
 
     def options(self, table): return self.interest(table) & self.volume(table) & self.size(table)
     def interest(self, table): return table["interest"] >= self.sizing.interest
@@ -71,17 +71,18 @@ class ETradeCriterion(ntuple("Criterion", "sizing")):
     def size(self, table): return table["size"] >= self.sizing.size
 
 
-def main(symbols, *args, api, criterion, parameters={}, **kwargs):
-    security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=api.key, apicode=api.code)
+def main(*args, arguments={}, parameters={}, **kwargs):
+    security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"].key, apicode=arguments["api"].code)
     option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
-    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=symbols, capacity=None, timeout=None)
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    market_criterion = MarketCriterion(**arguments)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
         stock_downloader = StockDownloaderProcessor(name="StockDownloader", feed=reader)
         product_downloader = ProductDownloaderProcessor(name="ProductDownloader", feed=reader)
         option_downloader = OptionDownloaderProcessor(name="OptionDownloader", feed=reader)
-        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=criterion.options)
+        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=market_criterion.options)
         option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a")
 
         market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_filter + option_saver
@@ -103,9 +104,9 @@ if __name__ == "__main__":
         sysSymbols = [Querys.Symbol(str(string).strip().upper()) for string in tickerfile.read().split("\n")]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysSizing = dict(size=0, volume=0, interest=0)
-    sysCriterion = ETradeCriterion(sizing=sysSizing)
+    sysArguments = dict(api=sysAPI, symbols=sysSymbols, sizing=sysSizing)
     sysParameters = dict(expires=sysExpires)
-    main(sysSymbols, api=sysAPI, criterion=sysCriterion, parameters=sysParameters)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

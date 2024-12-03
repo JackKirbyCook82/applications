@@ -29,7 +29,7 @@ from finance.variables import Variables, Querys
 from finance.securities import OptionFile
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
-from finance.prospects import ProspectCalculator, ProspectReader, ProspectDiscarding, ProspectAltering, ProspectWriter, ProspectTable
+from finance.prospects import ProspectCalculator, ProspectReader, ProspectDiscarding, ProspectAltering, ProspectWriter, ProspectTable, ProspectHeader, ProspectLayout
 from finance.holdings import HoldingCalculator, HoldingFile
 from support.pipelines import Routine, Producer, Processor, Consumer
 from support.files import Directory, Saver, FileTypes, FileTimings
@@ -56,60 +56,76 @@ class ProspectReaderProducer(ProspectReader, Producer, query=Querys.Contract): p
 class HoldingCalculatorProcessor(HoldingCalculator, Processor): pass
 class HoldingSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
 
-class AcquisitionCriterion(ntuple("Criterion", "trading sizing status timing pricing")):
-    Trading = ntuple("Trading", "discount liquidity capacity")
+
+class AcquisitionCriterion(ntuple("Criterion", "sizing profit")):
     Sizing = ntuple("Sizing", "size volume interest")
-    Status = ntuple("Status", "prospect pending")
-    Timing = ntuple("Timing", "current tenure")
-    Pricing = ntuple("Pricing", "apy")
+    Profit = ntuple("Profit", "apy cost")
 
-    def __new__(cls, *args, trading, sizing, status, timing, pricing, **kwargs):
-        trading = cls.Trading(*[trading[field] for field in cls.Trading._fields])
+    def __new__(cls, *args, sizing, profit, **kwargs):
         sizing = cls.Sizing(*[sizing[field] for field in cls.Sizing._fields])
-        status = cls.Status(*[status[field] for field in cls.Status._fields])
-        timing = cls.Timing(*[timing[field] for field in cls.Timing._fields])
-        pricing = cls.Pricing(*[pricing[field] for field in cls.Pricing._fields])
-        return super().__new__(cls, trading, sizing, status, timing, pricing)
+        profit = cls.Profit(*[profit[field] for field in cls.Profit._fields])
+        return super().__new__(cls, sizing, profit)
 
+    def options(self, table): return self.interest(table) & self.volume(table) & self.size(table)
+    def valuations(self, table): return self.apy(table) & self.cost(table) & self.size(table)
+    def apy(self, table): return table[("apy", Variables.Scenarios.MINIMUM)] >= self.profit.apy
+    def cost(self, table): return table["cost"] <= self.profit.cost
+    def interest(self, table): return table["interest"] >= self.sizing.interest
+    def volume(self, table): return table["volume"] >= self.sizing.volume
+    def size(self, table): return table["size"] >= self.sizing.size
+
+
+class AcquisitionProtocol(ntuple("Protocol", "trading timing")):
+    Trading = ntuple("Trading", "discount liquidity capacity")
+    Timing = ntuple("Timing", "current tenure")
+
+    def __new__(cls, *args, trading, timing, **kwargs):
+        trading = cls.Sizing(*[trading[field] for field in cls.Trading._fields])
+        timing = cls.Profit(*[timing[field] for field in cls.Timing._fields])
+        return super().__new__(cls, trading, timing)
+
+    def __iter__(self): return iter(self.functions.values())
+    def __getitem__(self, name): return self.functions[name]
     def __init__(self, *args, **kwargs):
-        status = [Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ACCEPTED, Variables.Status.ABANDONED, Variables.Status.PENDING]
-        functions = [self.obsolete, self.reject, self.accept, self.abandon, self.pursue]
-        self.functions = ODict([(function, status) for function, status in zip(functions, status)])
+        Protocol = ntuple("Protocol", "name variable function")
+        pursue = Protocol("pursue", Variables.Status.PROSPECT, lambda table: self.limited(self.pursue(table)))
+        abandon = Protocol("abandon", Variables.Status.ABANDON, lambda table: self.abandon(table))
+        reject = Protocol("reject", Variables.Status.REJECT, lambda table: self.reject(table))
+        accept = Protocol("accept", Variables.Status.ACCEPT, lambda table: self.accept(table))
+        self.functions = ODict([(protocol.name, protocol) for protocol in  (pursue, abandon, reject, accept)])
 
-    def options(self, table): return (table["size"] >= self.sizing.size) & (table["volume"] >= self.sizing.volume) & (table["interest"] >= self.sizing.interest)
-    def valuations(self, table): return (table[("apy", Variables.Scenarios.MINIMUM)] >= self.pricing.apy) & (table["size"] >= self.sizing.size)
-    def limited(self, mask): return (mask.cumsum() < self.trading.capacity + 1) & mask
     def unattractive(self, table): return table["priority"] < self.trading.discount
     def attractive(self, table): return table["priority"] >= self.trading.discount
     def illiquid(self, table): return table["size"] < self.trading.liquidity
     def liquid(self, table): return table["size"] < self.trading.liquidity
-    def prospect(self, table): return table["status"] == self.status.prospect
-    def pending(self, table): return table["status"] == self.status.pending
-    def timeout(self, table): return (pd.datetime("now") - table["current"]) >= self.timing.tenure
-    def obsolete(self, table): return self.prospect(table) & self.timeout(table)
-    def pursue(self, table): return self.limited(self.prospect(table) & self.attractive(table))
-    def abandon(self, table): return self.prospect(table) & self.unattractive(table)
-    def accept(self, table): return self.pending(table) & self.liquid(table)
-    def reject(self, table): return self.pending(table) & self.illiquid(table)
+    def pursue(self, table): return table["status"] == Variables.Status.PROSPECT & self.attractive(table)
+    def abandon(self, table): return table["status"] == Variables.Status.PROSPECT & self.unattractive(table)
+    def accept(self, table): return Variables.Status.PENDING & self.liquid(table)
+    def reject(self, table): return Variables.Status.PENDING & self.illiquid(table)
+    def limited(self, mask): return (mask.cumsum() < self.trading.capacity + 1) & mask
 
 
-def main(*args, criterion, parameters={}, **kwargs):
+def main(*args, arguments={}, parameters={}, **kwargs):
     option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
     holding_file = HoldingFile(name="HoldingFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=PORTFOLIO)
-    acquisition_table = ProspectTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
-    acquisition_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
+    acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.ARBITRAGE, rows=100)
+    acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.ARBITRAGE)
+    acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
+    prospect_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
+    acquisition_criterion = AcquisitionCriterion(**arguments)
+    acquisition_protocol = AcquisitionProtocol(**arguments)
 
     option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, mode="r")
-    option_filter = OptionFilterProcessor(name="OptionFilter", criterion=criterion.options)
+    option_filter = OptionFilterProcessor(name="OptionFilter", criterion=acquisition_criterion.options)
     strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
-    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", header=acquisition_table.header)
-    valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=criterion.valuations)
-    prospect_calculator = ProspectCalculatorProcessor(name="ProspectCalculator", priority=acquisition_priority)
+    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", header=acquisition_header)
+    valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=acquisition_criterion.valuations)
+    prospect_calculator = ProspectCalculatorProcessor(name="ProspectCalculator", header=acquisition_header, priority=prospect_priority)
     prospect_writer = ProspectWriterConsumer(name="ProspectWriter", table=acquisition_table, status=Variables.Status.PROSPECT)
     prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=acquisition_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED])
-    prospect_altering = ProspectAlteringRoutine(name="ProspectAltering", table=acquisition_table, functions=criterion.functions)
+    prospect_altering = ProspectAlteringRoutine(name="ProspectAltering", table=acquisition_table, protocol=acquisition_protocol["pursue"])
     prospect_reader = ProspectReaderProducer(name="ProspectReader", table=acquisition_table, status=[Variables.Status.ACCEPTED])
-    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", header=acquisition_table.header)
+    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", header=acquisition_header)
     holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
 
     valuation_process = option_directory + option_filter + strategy_calculator + valuation_calculator + valuation_filter + prospect_calculator + prospect_writer
@@ -123,7 +139,7 @@ def main(*args, criterion, parameters={}, **kwargs):
 #    altering_thread.start()
 #    discarding_thread.start()
     valuation_thread.start()
-    while bool(acquisition_thread) and bool(acquisition_table):
+    while bool(valuation_thread) or bool(acquisition_table):
         if bool(acquisition_table): print(acquisition_table)
         time.sleep(10)
     valuation_thread.join()
@@ -141,14 +157,13 @@ if __name__ == "__main__":
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=11, day=6)
     sysTenure = TimeDelta(days=1)
-    sysStatus = dict(prospect=Variables.Status.PROSPECT, pending=Variables.Status.PENDING)
-    sysTrading = dict(discount=2.00, liquidity=25, capacity=10)
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)
+    sysTrading = dict(discount=2.00, liquidity=25, capacity=10)
     sysSizing = dict(size=10, volume=100, interest=100)
-    sysPricing = dict(apy=1.00)
-    sysCriterion = AcquisitionCriterion(status=sysStatus, pricing=sysPricing, sizing=sysSizing, timing=sysTiming, trading=sysTrading)
+    sysProfit = dict(apy=1.00, cost=100000)
+    sysArguments = dict(timing=sysTiming, trading=sysTrading, sizing=sysSizing, profit=sysProfit)
     sysParameters = dict(current=sysCurrent, discount=0.00, fees=0.00)
-    main(criterion=sysCriterion, parameters=sysParameters)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 
