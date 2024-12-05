@@ -13,7 +13,9 @@ import logging
 import warnings
 import pandas as pd
 import xarray as xr
+from datetime import date as Date
 from datetime import datetime as Datetime
+from datetime import timedelta as TimeDelta
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -28,14 +30,14 @@ from finance.exposures import ExposureCalculator
 from finance.securities import OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
-from finance.prospects import ProspectCalculator, ProspectWriter, ProspectReader, ProspectTable
+from finance.prospects import ProspectCalculator, ProspectWriter, ProspectReader, ProspectTable, ProspectHeader, ProspectLayout
 from finance.orders import OrderCalculator
 from finance.stability import StabilityCalculator, StabilityFilter
 from finance.holdings import HoldingCalculator, HoldingFile
 from support.files import Directory, Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RepeatingThread
-from support.filtering import Filter, Criterion
 from support.processes import Source, Process
+from support.filtering import Filter
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -64,14 +66,15 @@ class HoldingSaverProcess(Saver, Process, query=Querys.Contract): pass
 
 
 def main(*args, arguments, parameters, **kwargs):
-#    option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
-#    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
-
-    option_sizing = lambda cols: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}
-    valuation_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     bars_file = BarsFile(name="BarsFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=HISTORY)
     holding_file = HoldingFile(name="HoldingFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=PORTFOLIO)
-    divestiture_table = ProspectTable(name="DivestitureTable", valuation=Variables.Valuations.ARBITRAGE)
+    divestiture_layout = ProspectLayout(name="DivestitureLayout", valuation=Variables.Valuations.ARBITRAGE, rows=100)
+    divestiture_header = ProspectHeader(name="DivestitureHeader", valuation=Variables.Valuations.ARBITRAGE)
+    divestiture_table = ProspectTable(name="DivestitureTable", layout=divestiture_layout, header=divestiture_header)
+    prospect_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
+    divestiture_criterion = DivestitureCriterion(**arguments)
+    divestiture_protocol = DivestitureProtocol(**arguments)
+
 
     bars_loader = BarsLoaderProcess(name="BarsLoader", file=bars_file, mode="r")
     statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
@@ -100,9 +103,14 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=11, day=6)
+    sysDate = Date(year=2024, month=11, day=6)
+    sysTenure = TimeDelta(days=1)
+    sysTiming = dict(date=sysDate, current=sysCurrent, tenure=sysTenure)
+    sysTrading = dict(discount=2.00, liquidity=25, capacity=1)
+    sysSizing = dict(size=10, volume=100, interest=100)
+    sysProfit = dict(apy=0.00, cost=0)
+    sysArguments = dict(timing=sysTiming, trading=sysTrading, sizing=sysSizing, profit=sysProfit)
     sysParameters = dict(current=sysCurrent, discount=0.00, fees=0.00, period=252)
-    sysArguments = dict(apy=0.00, size=10, volume=100, interest=100)
-    sysArguments = sysArguments | dict(discount=0.25, liquidity=25, capacity=2)
     main(arguments=sysArguments, parameters=sysParameters)
 
 

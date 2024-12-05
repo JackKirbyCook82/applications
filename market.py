@@ -33,6 +33,7 @@ from support.queues import Dequeuer, Queue
 from support.synchronize import RoutineThread
 from support.variables import DateRange
 from support.filtering import Filter
+from support.meta import NamedMeta
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -41,6 +42,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+ETradeAPI = ntuple("API", "key code")
 authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
 request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
@@ -55,27 +57,22 @@ class OptionSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-class ETradeAPI(ntuple("API", "key code")): pass
 
-
-class MarketCriterion(ntuple("Criterion", "sizing")):
-    Sizing = ntuple("Sizing", "size volume interest")
-
-    def __new__(cls, *args, sizing, profit, **kwargs):
-        sizing = cls.Sizing(*[sizing[field] for field in cls.Sizing._fields])
-        return super().__new__(cls, sizing)
-
-    def options(self, table): return self.interest(table) & self.volume(table) & self.size(table)
+class MarketSizing(object, fields=["size", "volume", "interest"], metaclass=NamedMeta): pass
+class MarketTiming(object, fields=["date"], metaclass=NamedMeta): pass
+class MarketCriterion(object, named={"sizing": MarketSizing, "timing": MarketTiming}, metaclass=NamedMeta):
+    def options(self, table): return self.interest(table) & self.volume(table) & self.size(table) & self.date(table)
     def interest(self, table): return table["interest"] >= self.sizing.interest
     def volume(self, table): return table["volume"] >= self.sizing.volume
     def size(self, table): return table["size"] >= self.sizing.size
+    def date(self, table): return table["current"].dt.date == self.timing.date
 
 
-def main(*args, arguments={}, parameters={}, **kwargs):
+def main(*args, criterion={}, arguments={}, parameters={}, **kwargs):
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"].key, apicode=arguments["api"].code)
     option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
-    market_criterion = MarketCriterion(**arguments)
+    market_criterion = MarketCriterion(criterion)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
@@ -102,11 +99,13 @@ if __name__ == "__main__":
         sysAPI = ETradeAPI(sysAPIKey, sysAPICode)
     with open(TICKERS, "r") as tickerfile:
         sysSymbols = [Querys.Symbol(str(string).strip().upper()) for string in tickerfile.read().split("\n")]
-    sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
+        sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysSizing = dict(size=0, volume=0, interest=0)
-    sysArguments = dict(api=sysAPI, symbols=sysSymbols, sizing=sysSizing)
+    sysTiming = dict(date=Datetime.today().date())
+    sysCriterion = dict(sizing=sysSizing, timing=sysTiming)
+    sysArguments = dict(api=sysAPI, symbols=sysSymbols)
     sysParameters = dict(expires=sysExpires)
-    main(arguments=sysArguments, parameters=sysParameters)
+    main(criterion=sysCriterion, arguments=sysArguments, parameters=sysParameters)
 
 
 
