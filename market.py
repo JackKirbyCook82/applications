@@ -32,7 +32,7 @@ from support.files import Saver, FileTypes, FileTimings
 from support.queues import Dequeuer, Queue
 from support.synchronize import RoutineThread
 from support.variables import DateRange
-from support.filtering import Filter
+from support.operations import Filter
 from support.meta import NamedMeta
 
 __version__ = "1.0.0"

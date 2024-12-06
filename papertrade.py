@@ -29,7 +29,7 @@ from webscraping.webreaders import WebAuthorizer, WebReader
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
 from support.queues import Dequeuer, QueueTypes, Queue
-from support.filtering import Filter, Criterion
+from support.operations import Filter, Criterion
 from support.synchronize import RoutineThread
 from support.mixins import Carryover
 
