@@ -8,6 +8,7 @@ Created on Weds Jul 12 2023
 
 import os
 import sys
+import types
 import logging
 import warnings
 import pandas as pd
@@ -29,11 +30,11 @@ from finance.securities import OptionFile
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.pipelines import Producer, Processor, Consumer
 from support.files import Saver, FileTypes, FileTimings
-from support.queues import Dequeuer, Queue
 from support.synchronize import RoutineThread
+from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.operations import Filter
-from support.meta import NamedMeta
+from support.processes import Filter
+from support.mixins import Naming
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -48,38 +49,38 @@ request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
+
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
 class StockDownloaderProcessor(ETradeStockDownloader, Processor): pass
 class ProductDownloaderProcessor(ETradeProductDownloader, Processor): pass
 class OptionDownloaderProcessor(ETradeOptionDownloader, Processor): pass
-class OptionFilterProcessor(Filter, Processor): pass
+class OptionFilterProcessor(Filter, Processor, query=Querys.Contract): pass
 class OptionSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
 
-class MarketSizing(object, fields=["size", "volume", "interest"], metaclass=NamedMeta): pass
-class MarketTiming(object, fields=["date"], metaclass=NamedMeta): pass
-class MarketCriterion(object, named={"sizing": MarketSizing, "timing": MarketTiming}, metaclass=NamedMeta):
-    def options(self, table): return self.interest(table) & self.volume(table) & self.size(table) & self.date(table)
+class OptionSizing(Naming, fields=["size", "volume", "interest"]): pass
+class OptionCriterion(Naming, named={"sizing": OptionSizing}):
+    def __iter__(self): return iter([self.interest, self.volume, self.size])
+
     def interest(self, table): return table["interest"] >= self.sizing.interest
     def volume(self, table): return table["volume"] >= self.sizing.volume
     def size(self, table): return table["size"] >= self.sizing.size
-    def date(self, table): return table["current"].dt.date == self.timing.date
 
 
-def main(*args, criterion={}, arguments={}, parameters={}, **kwargs):
+def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"].key, apicode=arguments["api"].code)
     option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
-    market_criterion = MarketCriterion(criterion)
+    option_criterion = OptionCriterion(namespace)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
         stock_downloader = StockDownloaderProcessor(name="StockDownloader", feed=reader)
         product_downloader = ProductDownloaderProcessor(name="ProductDownloader", feed=reader)
         option_downloader = OptionDownloaderProcessor(name="OptionDownloader", feed=reader)
-        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=market_criterion.options)
+        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=list(option_criterion))
         option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a")
 
         market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_filter + option_saver
@@ -101,11 +102,10 @@ if __name__ == "__main__":
         sysSymbols = [Querys.Symbol(str(string).strip().upper()) for string in tickerfile.read().split("\n")]
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysSizing = dict(size=0, volume=0, interest=0)
-    sysTiming = dict(date=Datetime.today().date())
-    sysCriterion = dict(sizing=sysSizing, timing=sysTiming)
     sysArguments = dict(api=sysAPI, symbols=sysSymbols)
     sysParameters = dict(expires=sysExpires)
-    main(criterion=sysCriterion, arguments=sysArguments, parameters=sysParameters)
+    sysNamespace = dict(sizing=sysSizing)
+    main(arguments=sysArguments, parameters=sysParameters, namespace=sysNamespace)
 
 
 
