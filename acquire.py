@@ -30,10 +30,12 @@ from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator, ProspectReader, ProspectWriter, ProspectDiscarding, ProspectProtocols, ProspectTable, ProspectHeader, ProspectLayout
 from finance.holdings import HoldingCalculator, HoldingFile
 from support.pipelines import Routine, Producer, Processor, Consumer
-from support.files import Directory, Saver, FileTypes, FileTimings
+from support.files import Loader, Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread, RepeatingThread
-from support.processes import Filter, Pivot, Unpivot
+from support.transforms import Pivot, Unpivot
 from support.decorators import Decorator
+from support.meta import NamingMeta
+from support.filters import Filter
 from support.mixins import Naming
 
 __version__ = "1.0.0"
@@ -43,7 +45,7 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class OptionDirectoryProducer(Directory, Producer, query=Querys.Contract): pass
+class OptionLoaderProducer(Loader, Producer, query=Querys.Contract): pass
 class OptionFilterProcessor(Filter, Processor, query=Querys.Contract): pass
 class StrategyCalculatorProcessor(StrategyCalculator, Processor): pass
 class ValuationCalculatorProcessor(ValuationCalculator, Processor): pass
@@ -63,7 +65,7 @@ class AcquisitionSizing(Naming, fields=["size", "volume", "interest"]): pass
 class AcquisitionTiming(Naming, fields=["current", "tenure"]): pass
 class AcquisitionProfit(Naming, fields=["apy", "cost"]): pass
 
-class OptionCriterion(Naming, named={"sizing": AcquisitionSizing, "timing": AcquisitionTiming, "profit": AcquisitionProfit}):
+class OptionCriterion(object, named={"sizing": AcquisitionSizing, "timing": AcquisitionTiming, "profit": AcquisitionProfit}, metaclass=NamingMeta):
     def __iter__(self): return iter([self.interest, self.volume, self.size, self.date])
 
     def date(self, table): return table["current"].dt.date == self.timing.current.date()
@@ -71,7 +73,7 @@ class OptionCriterion(Naming, named={"sizing": AcquisitionSizing, "timing": Acqu
     def volume(self, table): return table["volume"] >= self.sizing.volume
     def size(self, table): return table["size"] >= self.sizing.size
 
-class ValuationCriterion(Naming, named={"sizing": AcquisitionSizing, "profit": AcquisitionProfit}):
+class ValuationCriterion(object, named={"sizing": AcquisitionSizing, "profit": AcquisitionProfit}, metaclass=NamingMeta):
     def __iter__(self): return iter([self.apy, self.cost, self.size])
 
     def apy(self, table): return table[("apy", Variables.Scenarios.MINIMUM)] >= self.profit.apy
@@ -79,7 +81,7 @@ class ValuationCriterion(Naming, named={"sizing": AcquisitionSizing, "profit": A
     def size(self, table): return table[("size", "")] >= self.sizing.size
 
 class AcquisitionProtocol(Decorator): pass
-class AcquisitionProtocols(Naming, named={"trading": AcquisitionTrading, "timing": AcquisitionTiming}, methods=AcquisitionProtocol):
+class AcquisitionProtocols(object, named={"trading": AcquisitionTrading, "timing": AcquisitionTiming}, metaclass=NamingMeta):
     def __iter__(self): return iter([(method, method["status"]) for method in [self.obsolete, self.abandon, self.pursue, self.reject, self.accept]])
 
     def limited(self, mask): return (mask.cumsum() < self.trading.capacity + 1) & mask
@@ -113,22 +115,22 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     valuation_criterion = ValuationCriterion(namespace)
     option_criterion = OptionCriterion(namespace)
 
-    option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, mode="r")
+    option_loader = OptionLoaderProducer(name="OptionDirectory", file=option_file, mode="r")
     option_filter = OptionFilterProcessor(name="OptionFilter", criterion=list(option_criterion))
     strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
     valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", pivot=tuple(acquisition_header.pivot))
+    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(acquisition_header.pivot))
     valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=list(valuation_criterion))
     prospect_calculator = ProspectCalculatorProcessor(name="ProspectCalculator", header=acquisition_header, priority=acquisition_priority)
     prospect_writer = ProspectWriterConsumer(name="ProspectWriter", table=acquisition_table, status=Variables.Status.PROSPECT)
     prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=acquisition_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED])
     prospect_protocol = ProspectProtocolsRoutine(name="ProspectAltering", table=acquisition_table, protocols=dict(acquisition_protocols))
     prospect_reader = ProspectReaderProducer(name="ProspectReader", table=acquisition_table, status=[Variables.Status.ACCEPTED])
-    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", unpivot=tuple(acquisition_header.unpivot))
+    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", header=tuple(acquisition_header.unpivot))
     holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator")
     holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
 
-    valuation_process = option_directory + option_filter + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter + prospect_calculator + prospect_writer
+    valuation_process = option_loader + option_filter + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter + prospect_calculator + prospect_writer
     acquisition_process = prospect_reader + prospect_unpivot + holding_calculator + holding_saver
     valuation_thread = RoutineThread(valuation_process, name="ValuationThread").setup(**parameters)
     discarding_thread = RepeatingThread(prospect_discarding, name="DiscardingThread", wait=10).setup(**parameters)
@@ -161,7 +163,7 @@ if __name__ == "__main__":
     sysCurrent = Datetime(year=2024, month=12, day=6, hour=21, minute=0)
     sysTenure = TimeDelta(days=1)
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)
-    sysTrading = dict(discount=1.75, liquidity=25, capacity=1)
+    sysTrading = dict(discount=1.75, liquidity=25, capacity=2)
     sysSizing = dict(size=10, volume=100, interest=100)
     sysProfit = dict(apy=1.00, cost=100000)
     sysNamespace = dict(timing=sysTiming, sizing=sysSizing, profit=sysProfit, trading=sysTrading)

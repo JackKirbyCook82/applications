@@ -33,12 +33,14 @@ from finance.prospects import ProspectCalculator, ProspectReader, ProspectWriter
 from finance.orders import OrderCalculator
 from finance.stability import StabilityCalculator, StabilityFilter
 from finance.holdings import HoldingCalculator, HoldingFile
-from support.files import Directory, Loader, Saver, FileTypes, FileTimings
+from support.files import Loader, Saver, FileTypes, FileTimings
 from support.pipelines import Routine, Producer, Processor, Consumer
-from support.processes import Filter, Pivot, Unpivot
 from support.algorithms import Source, Algorithm
 from support.synchronize import RepeatingThread
+from support.transforms import Pivot, Unpivot
 from support.decorators import Decorator
+from support.meta import NamingMeta
+from support.filters import Filter
 from support.mixins import Naming
 
 __version__ = "1.0.0"
@@ -48,11 +50,11 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class HoldingDirectorySource(Directory, Source, query=Querys.Contract, signature="->holdings"): pass
-class BarsLoaderProcess(Loader, Algorithm, query=Querys.Symbol, signature="->bars"): pass
+class HoldingLoaderSource(Loader, Source, query=Querys.Contract, signature="->holdings"): pass
 class ExposureCalculatorProcess(ExposureCalculator, Algorithm, signature="holdings->exposures"): pass
+class BarsLoaderProcess(Loader, Algorithm, query=Querys.Symbol, signature="holdings->bars"): pass
 class StatisticCalculatorProcess(TechnicalCalculator, Algorithm, signature="bars->statistics"): pass
-class OptionCalculatorProcess(OptionCalculator, Algorithm, signature="exposures->options"): pass
+class OptionCalculatorProcess(OptionCalculator, Algorithm, signature="(exposures,statistics)->options"): pass
 class OptionFilterOperation(Filter, Algorithm, query=Querys.Contract, signature="options->options"): pass
 class StrategyCalculatorProcess(StrategyCalculator, Algorithm, signature="options->strategies"): pass
 class ValuationCalculatorProcess(ValuationCalculator, Algorithm, signature="strategies->valuations"): pass
@@ -77,14 +79,14 @@ class DivestitureTiming(Naming, fields=["current", "tenure"]): pass
 class DivestitureProfit(Naming, fields=["apy", "cost"]): pass
 
 class OptionAssumptions(Naming, fields=["pricing"], named={"sizing": DivestitureSizing, "timing": DivestitureTiming}): pass
-class OptionCriterion(Naming, named={"sizing": DivestitureSizing}):
+class OptionCriterion(object, named={"sizing": DivestitureSizing}, metaclass=NamingMeta):
     def __iter__(self): return iter([self.interest, self.volume, self.size])
 
     def interest(self, table): return table["interest"] >= self.sizing.interest
     def volume(self, table): return table["volume"] >= self.sizing.volume
     def size(self, table): return table["size"] >= self.sizing.size
 
-class ValuationCriterion(Naming, named={"sizing": DivestitureSizing, "profit": DivestitureProfit}):
+class ValuationCriterion(object, named={"sizing": DivestitureSizing, "profit": DivestitureProfit}, metaclass=NamingMeta):
     def __iter__(self): return iter([self.apy, self.cost, self.size])
 
     def apy(self, table): return table[("apy", Variables.Scenarios.MINIMUM)] >= self.profit.apy
@@ -92,7 +94,7 @@ class ValuationCriterion(Naming, named={"sizing": DivestitureSizing, "profit": D
     def size(self, table): return table[("size", "")] >= self.sizing.size
 
 class DivestitureProtocol(Decorator): pass
-class DivestitureProtocols(Naming, named={"trading": DivestitureTrading, "timing": DivestitureTiming}, methods=DivestitureProtocol):
+class DivestitureProtocols(object, named={"trading": DivestitureTrading, "timing": DivestitureTiming}, metaclass=NamingMeta):
     def __iter__(self): return iter([(method, method["status"]) for method in [self.obsolete, self.abandon, self.pursue, self.reject, self.accept]])
 
     def limited(self, mask): return (mask.cumsum() < self.trading.capacity + 1) & mask
@@ -127,7 +129,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     option_assumptions = OptionAssumptions(namespace)
     option_criterion = OptionCriterion(namespace)
 
-    holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, mode="r")
+    holding_loader = HoldingLoaderSource(name="HoldingLoader", file=holding_file, mode="r")
     bars_loader = BarsLoaderProcess(name="BarsLoader", file=bars_file, mode="r")
     statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
     exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
@@ -135,21 +137,21 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     option_filter = OptionFilterOperation(name="OptionFilter", criterion=list(option_criterion))
     strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=Variables.Strategies)
     valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", pivot=tuple(divestiture_header.pivot))
+    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(divestiture_header.pivot))
     valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=list(valuation_criterion))
     prospect_calculator = ProspectCalculatorProcess(name="ProspectCalculator", header=divestiture_header, priority=divestiture_priority)
     order_calculator = OrderCalculatorProcess(name="OrderCalculator")
     stability_calculator = StabilityCalculatorProcess(name="StabilityCalculator")
     stability_filter = StabilityFilterProcess(name="StabilityFilter")
-    prospect_writer = ProspectWriterProcess(name="ProspectWriter", table=divestiture_table)
+    prospect_writer = ProspectWriterProcess(name="ProspectWriter", table=divestiture_table, status=Variables.Status.PROSPECT)
     prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=divestiture_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED])
     prospect_protocol = ProspectProspectsRoutine(name="ProspectAltering", table=divestiture_table, protocols=dict(divestiture_protocols))
-    prospect_reader = ProspectReaderSource(name="ProspectReader", table=divestiture_table)
-    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", unpivot=tuple(divestiture_header.unpivot))
+    prospect_reader = ProspectReaderSource(name="ProspectReader", table=divestiture_table, status=[Variables.Status.ACCEPTED])
+    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", header=tuple(divestiture_header.unpivot))
     holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator")
     holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a")
 
-    valuations_process = holding_directory + bars_loader + statistic_calculator + exposure_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter
+    valuations_process = holding_loader + exposure_calculator + bars_loader + statistic_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter
     valuations_process = valuations_process + prospect_calculator + order_calculator + stability_calculator + stability_filter + prospect_writer
     divestiture_process = prospect_reader + prospect_unpivot + holding_calculator + holding_saver
     valuations_thread = RepeatingThread(valuations_process, name="ValuationThread", wait=10).setup(**parameters)

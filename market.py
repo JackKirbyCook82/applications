@@ -8,7 +8,6 @@ Created on Weds Jul 12 2023
 
 import os
 import sys
-import types
 import logging
 import warnings
 import pandas as pd
@@ -33,7 +32,8 @@ from support.files import Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.processes import Filter
+from support.filters import Filter
+from support.meta import NamingMeta
 from support.mixins import Naming
 
 __version__ = "1.0.0"
@@ -61,7 +61,7 @@ class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, acce
 class ETradeReader(WebReader, delay=10): pass
 
 class OptionSizing(Naming, fields=["size", "volume", "interest"]): pass
-class OptionCriterion(Naming, named={"sizing": OptionSizing}):
+class OptionCriterion(object, named={"sizing": OptionSizing}, metaclass=NamingMeta):
     def __iter__(self): return iter([self.interest, self.volume, self.size])
 
     def interest(self, table): return table["interest"] >= self.sizing.interest
