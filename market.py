@@ -24,17 +24,17 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
-from finance.variables import Querys
 from finance.securities import OptionFile
+from finance.variables import Querys
 from webscraping.webreaders import WebAuthorizer, WebReader
 from support.pipelines import Producer, Processor, Consumer
-from support.files import Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.filters import Filter
 from support.meta import NamingMeta
+from support.filters import Filter
 from support.mixins import Naming
+from support.files import Saver
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -48,7 +48,6 @@ authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
 request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
-
 
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
 class StockDownloaderProcessor(ETradeStockDownloader, Processor): pass
@@ -71,8 +70,8 @@ class OptionCriterion(object, named={"sizing": OptionSizing}, metaclass=NamingMe
 
 def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"].key, apicode=arguments["api"].code)
-    option_file = OptionFile(name="OptionFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=MARKET)
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    option_file = OptionFile(name="OptionFile", repository=MARKET)
     option_criterion = OptionCriterion(namespace)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
@@ -99,8 +98,9 @@ if __name__ == "__main__":
         sysAPIKey, sysAPICode = [str(string).strip() for string in str(apifile.read()).split("\n")]
         sysAPI = ETradeAPI(sysAPIKey, sysAPICode)
     with open(TICKERS, "r") as tickerfile:
-        sysSymbols = [Querys.Symbol(str(string).strip().upper()) for string in tickerfile.read().split("\n")]
-        sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
+        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
+        sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
+    sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysSizing = dict(size=0, volume=0, interest=0)
     sysArguments = dict(api=sysAPI, symbols=sysSymbols)
     sysParameters = dict(expires=sysExpires)

@@ -27,10 +27,10 @@ from finance.variables import Variables, Querys
 from finance.technicals import BarsFile
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
-from support.queues import Dequeuer, Queue
-from support.files import Saver, FileTypes, FileTimings
 from support.synchronize import RoutineThread
+from support.queues import Dequeuer, Queue
 from support.variables import DateRange
+from support.files import Saver
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -43,13 +43,13 @@ class SymbolDequeuerProducer(Dequeuer, Producer): pass
 class HistoryDownloaderProcessor(YahooTechnicalDownloader, Processor): pass
 class HistorySaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
 
-class YahooDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10):
+class YahooDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10):
     pass
 
 
-def main(symbols, *args, parameters={}, **kwargs):
-    bars_file = BarsFile(name="BarsFile", filetype=FileTypes.CSV, filetiming=FileTimings.EAGER, repository=HISTORY)
-    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=symbols, capacity=None, timeout=None)
+def main(*args, arguments={}, parameters={}, **kwargs):
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
+    bars_file = BarsFile(name="BarsFile", repository=HISTORY)
 
     with YahooDriver(name="HistoryReader") as reader:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
@@ -73,6 +73,7 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
     sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
+    sysArguments = dict(symbols=sysSymbols)
     sysParameters = dict(dates=sysDates, period=252)
     main(sysSymbols, parameters=sysParameters)
 

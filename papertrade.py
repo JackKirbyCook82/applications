@@ -10,8 +10,7 @@ import os
 import sys
 import logging
 import warnings
-from datetime import datetime as Datetime
-from datetime import timedelta as Timedelta
+from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -22,17 +21,18 @@ if ROOT not in sys.path:
     sys.path.append(ROOT)
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
-from finance.variables import Variables, Querys, DateRange
+from finance.variables import Variables, Querys
 from finance.strategies import StrategyCalculator
-from finance.valuations import ValuationCalculator, ValuationWriter, ValuationTable
+from finance.valuations import ValuationCalculator
+from finance.prospects import ProspectCalculator, ProspectWriter
 from webscraping.webreaders import WebAuthorizer, WebReader
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
-from support.queues import Dequeuer, QueueTypes, Queue
-from support.filters import Filter, Criterion
-from support.synchronize import RoutineThread
-from support.mixins import Carryover
-
+from support.queues import Dequeuer
+from support.transforms import Pivot
+from support.meta import NamingMeta
+from support.filters import Filter
+from support.mixins import Naming
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -41,51 +41,49 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+ETradeAPI = ntuple("API", "key code")
 authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
 request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
-class StockDownloaderProcessor(ETradeStockDownloader, Processor, Carryover, carryover="symbol", leading=True): pass
+class StockDownloaderProcessor(ETradeStockDownloader, Processor): pass
 class ProductDownloaderProcessor(ETradeProductDownloader, Processor): pass
-class OptionDownloaderProcessor(ETradeOptionDownloader, Processor, Carryover, carryover="product", leading=True): pass
-class OptionFilterProcessor(Filter, Processor, Carryover, carryover="product", leading=True): pass
-class StrategyCalculatorProcessor(StrategyCalculator, Processor, Carryover, carryover="product", leading=True): pass
-class ValuationCalculatorProcessor(ValuationCalculator, Processor, Carryover, carryover="product", leading=True): pass
-class ValuationFilterProcessor(Filter, Processor, Carryover, carryover="product", leading=True): pass
-class ValuationWriterConsumer(ValuationWriter, Consumer): pass
+class OptionDownloaderProcessor(ETradeOptionDownloader, Processor): pass
+class OptionFilterProcessor(Filter, Processor, query=Querys.Contract): pass
+class StrategyCalculatorProcessor(StrategyCalculator, Processor): pass
+class ValuationCalculatorProcessor(ValuationCalculator, Processor): pass
+class ValuationPivotProcessor(Pivot, Processor, query=Querys.Contract): pass
+class ValuationFilterProcessor(Filter, Processor, query=Querys.Contract): pass
+class ProspectCalculatorProcessor(ProspectCalculator, Processor): pass
+class ProspectWriterConsumer(ProspectWriter, Consumer, query=Querys.Contract): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
 class ETradeReader(WebReader, delay=10): pass
 
+class SizingCriterion(Naming, fields=["size", "volume", "interest"]): pass
+class ProfitCriterion(Naming, fields=["apy", "cost"]): pass
 
-def main(*args, arguments, parameters, **kwargs):
-    security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["apikey"], apicode=arguments["apicode"])
-    symbol_queue = Queue[QueueTypes.FIFO](name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
-    option_criterion = {Criterion.FLOOR: {"size": arguments["size"], "volume": arguments["volume"], "interest": arguments["interest"]}, Criterion.NULL: ["size", "volume", "interest"]}
-    valuation_criterion = {Criterion.FLOOR: {("apy", Variables.Scenarios.MINIMUM): arguments["apy"], "size": arguments["size"]}, Criterion.NULL: [("apy", Variables.Scenarios.MINIMUM), "size"]}
-    valuation_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    acquisition_table = ValuationTable(name="AcquisitionTable", valuation=Variables.Valuations.ARBITRAGE)
+class OptionCriterion(object, named={"sizing": SizingCriterion, "profit": ProfitCriterion}, metaclass=NamingMeta):
+    def __iter__(self): return iter([self.interest, self.volume, self.size, self.date])
 
-    with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
-        symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
-        stock_downloader = StockDownloaderProcessor(name="StockDownloader", feed=reader)
-        product_downloader = ProductDownloaderProcessor(name="ProductDownloader", feed=reader)
-        option_downloader = OptionDownloaderProcessor(name="OptionDownloader", feed=reader)
-        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=option_criterion)
-        strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
-        valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-        valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=valuation_criterion)
-        valuation_writer = ValuationWriterConsumer(name="ValuationWriter", table=acquisition_table, valuation=Variables.Valuations.ARBITRAGE, priority=valuation_priority)
+    def date(self, table): return table["current"].dt.date == self.timing.current.date()
+    def interest(self, table): return table["interest"] >= self.sizing.interest
+    def volume(self, table): return table["volume"] >= self.sizing.volume
+    def size(self, table): return table["size"] >= self.sizing.size
 
-        market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_filter + strategy_calculator + valuation_calculator + valuation_filter + valuation_writer
-        market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(**parameters)
-        market_thread.start()
-        market_thread.join()
+class ValuationCriterion(object, named={"sizing": SizingCriterion, "profit": ProfitCriterion}, metaclass=NamingMeta):
+    def __iter__(self): return iter([self.apy, self.cost, self.size])
 
-    with ETradeDriver(name="PaperTradeReader", port=8989) as driver:
+    def apy(self, table): return table[("apy", Variables.Scenarios.MINIMUM)] >= self.profit.apy
+    def cost(self, table): return table[("cost", Variables.Scenarios.MINIMUM)] <= self.profit.cost
+    def size(self, table): return table[("size", "")] >= self.sizing.size
+
+
+def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
+    with ETradeDriver(name="PaperTradeTerminal", port=8989) as driver:
         pass
 
 
@@ -94,13 +92,14 @@ if __name__ == "__main__":
     logging.getLogger("seleniumwire").setLevel(logging.ERROR)
     warnings.filterwarnings("ignore")
     with open(API, "r") as apifile:
-        sysApiKey, sysApiCode = [str(string).strip() for string in str(apifile.read()).split("\n")]
-    with open(TICKERS, "r") as tickerfile:
-        sysSymbols = [Querys.Symbol(str(string).strip().upper()) for string in tickerfile.read().split("\n")]
-    sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysArguments = dict(apikey=sysApiKey, apicode=sysApiCode, symbols=sysSymbols, apy=0.25, size=10, volume=100, interest=100)
-    sysParameters = dict(expires=sysExpires, discount=0.05, fees=1.00)
-    main(arguments=sysArguments, parameters=sysParameters)
+        sysAPIKey, sysAPICode = [str(string).strip() for string in str(apifile.read()).split("\n")]
+        sysAPI = ETradeAPI(sysAPIKey, sysAPICode)
+    sysSizing = dict(size=10, volume=100, interest=100)
+    sysProfit = dict(apy=1.00, cost=100000)
+    sysArguments = dict(api=sysAPI)
+    sysParameters = dict(discount=0.00, fees=0.00)
+    sysNamespace = dict(sizing=sysSizing, profit=sysProfit)
+    main(arguments=sysArguments, parameters=sysParameters, namespace=sysNamespace)
 
 
 
