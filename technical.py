@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Fri Apr 19 2024
-@name:   Yahoo History Downloader
+@name:   Yahoo Technical Downloader
 @author: Jack Kirby Cook
 
 """
@@ -22,8 +22,8 @@ CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 if ROOT not in sys.path:
     sys.path.append(ROOT)
 
-from yahoo.history import YahooTechnicalDownloader
-from finance.variables import Variables, Querys
+from yahoo.technicals import YahooHistoryDownloader
+from finance.variables import Querys
 from finance.technicals import BarsFile
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
@@ -40,7 +40,7 @@ __license__ = "MIT License"
 
 
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
-class HistoryDownloaderProcessor(YahooTechnicalDownloader, Processor): pass
+class HistoryDownloaderProcessor(YahooHistoryDownloader, Processor): pass
 class HistorySaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
 
 class YahooDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10):
@@ -51,15 +51,15 @@ def main(*args, arguments={}, parameters={}, **kwargs):
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
     bars_file = BarsFile(name="BarsFile", repository=HISTORY)
 
-    with YahooDriver(name="HistoryReader") as reader:
+    with YahooDriver(name="TechnicalReader") as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
-        history_downloader = HistoryDownloaderProcessor(name="HistoryDownloader", feed=reader, instrument=Variables.Technicals.BARS)
-        history_saver = HistorySaverConsumer(name="HistorySaver", file=bars_file, mode="a")
+        bars_downloader = HistoryDownloaderProcessor(name="BarDownloader", source=source)
+        bars_saver = HistorySaverConsumer(name="BarSaver", file=bars_file, mode="a")
 
-        history_pipeline = symbol_dequeue + history_downloader + history_saver
-        history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(**parameters)
-        history_thread.start()
-        history_thread.join()
+        technical_pipeline = symbol_dequeue + bars_downloader + bars_saver
+        technical_thread = RoutineThread(technical_pipeline, name="TechnicalThread").setup(**parameters)
+        technical_thread.start()
+        technical_thread.join()
 
 
 if __name__ == "__main__":

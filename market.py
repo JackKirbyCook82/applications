@@ -74,11 +74,11 @@ def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
     option_file = OptionFile(name="OptionFile", repository=MARKET)
     option_criterion = OptionCriterion(namespace)
 
-    with ETradeReader(name="MarketReader", authorizer=security_authorizer) as reader:
+    with ETradeReader(name="MarketReader", authorizer=security_authorizer) as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
-        stock_downloader = StockDownloaderProcessor(name="StockDownloader", feed=reader)
-        product_downloader = ProductDownloaderProcessor(name="ProductDownloader", feed=reader)
-        option_downloader = OptionDownloaderProcessor(name="OptionDownloader", feed=reader)
+        stock_downloader = StockDownloaderProcessor(name="StockDownloader", source=source)
+        product_downloader = ProductDownloaderProcessor(name="ProductDownloader", source=source)
+        option_downloader = OptionDownloaderProcessor(name="OptionDownloader", source=source)
         option_filter = OptionFilterProcessor(name="OptionFilter", criterion=list(option_criterion))
         option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a")
 
