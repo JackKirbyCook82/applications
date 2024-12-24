@@ -17,8 +17,7 @@ ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 TICKERS = os.path.join(ROOT, "applications", "tickers.txt")
 CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 API = os.path.join(ROOT, "applications", "api.txt")
-if ROOT not in sys.path:
-    sys.path.append(ROOT)
+if ROOT not in sys.path: sys.path.append(ROOT)
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
 from finance.variables import Variables, Querys

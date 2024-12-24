@@ -16,21 +16,20 @@ from datetime import timedelta as Timedelta
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
-HISTORY = os.path.join(ROOT, "repository", "history")
+TECHNICAL = os.path.join(ROOT, "repository", "technical")
 TICKERS = os.path.join(ROOT, "applications", "tickers.txt")
 CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
-if ROOT not in sys.path:
-    sys.path.append(ROOT)
+if ROOT not in sys.path: sys.path.append(ROOT)
 
 from yahoo.technicals import YahooHistoryDownloader
 from finance.variables import Querys
-from finance.technicals import BarsFile
+from finance.technicals import StatisticCalculator, StochasticCalculator, HistoryFile, StatisticFile, StochasticFile
 from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
+from support.files import Loader, Saver, Directory
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.files import Saver
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -42,6 +41,12 @@ __license__ = "MIT License"
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
 class HistoryDownloaderProcessor(YahooHistoryDownloader, Processor): pass
 class HistorySaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
+class HistoryDirectoryProducer(Directory, Producer, query=Querys.Symbol): pass
+class HistoryLoaderProcessor(Loader, Processor, query=Querys.Symbol): pass
+class StatisticCalculatorProcessor(StatisticCalculator, Processor): pass
+class StochasticCalculatorProcessor(StochasticCalculator, Processor): pass
+class StatisticSaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
+class StochasticSaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
 
 class YahooDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10):
     pass
@@ -49,17 +54,36 @@ class YahooDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay
 
 def main(*args, arguments={}, parameters={}, **kwargs):
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
-    bars_file = BarsFile(name="BarsFile", repository=HISTORY)
+    stochastic_file = StochasticFile(name="StochasticFile", repository=TECHNICAL)
+    statistic_file = StatisticFile(name="StatisticFile", repository=TECHNICAL)
+    history_file = HistoryFile(name="BarsFile", repository=TECHNICAL)
 
-    with YahooDriver(name="TechnicalReader") as source:
+    with YahooDriver(name="HistoryReader") as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
-        bars_downloader = HistoryDownloaderProcessor(name="BarDownloader", source=source)
-        bars_saver = HistorySaverConsumer(name="BarSaver", file=bars_file, mode="a")
+        history_downloader = HistoryDownloaderProcessor(name="HistoryDownloader", source=source)
+        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="a")
 
-        technical_pipeline = symbol_dequeue + bars_downloader + bars_saver
-        technical_thread = RoutineThread(technical_pipeline, name="TechnicalThread").setup(**parameters)
-        technical_thread.start()
-        technical_thread.join()
+        history_pipeline = symbol_dequeue + history_downloader + history_saver
+        history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(**parameters)
+        history_thread.start()
+        history_thread.join()
+
+    history_directory = HistoryDirectoryProducer(name="HistoryDirectory", file=history_file, mode="r")
+    history_loader = HistoryLoaderProcessor(name="HistoryLoader", file=history_file, mode="r")
+    statistic_calculator = StatisticCalculatorProcessor(name="StatisticCalculator")
+    stochastic_calculator = StochasticCalculatorProcessor(name="StochasticCalculator")
+    statistic_saver = StatisticSaverConsumer(name="StatisticSaver", file=statistic_file, mode="w")
+    stochastic_saver = StochasticSaverConsumer(name="StochasticSaver", file=stochastic_file, mode="w")
+
+    statistic_pipeline = history_directory + history_loader + statistic_calculator + statistic_saver
+    statistic_thread = RoutineThread(statistic_pipeline, name="StatisticThread").setup(**parameters)
+    stochastic_pipeline = history_directory + history_loader + stochastic_calculator + stochastic_saver
+    stochastic_thread = RoutineThread(stochastic_pipeline, name="StochasticThread").setup(**parameters)
+
+    statistic_thread.start()
+    stochastic_thread.start()
+    statistic_thread.join()
+    stochastic_thread.join()
 
 
 if __name__ == "__main__":
@@ -72,10 +96,10 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
-    sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
+    sysDates = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=52*3)).date()])
     sysArguments = dict(symbols=sysSymbols)
     sysParameters = dict(dates=sysDates, period=252)
-    main(sysSymbols, parameters=sysParameters)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

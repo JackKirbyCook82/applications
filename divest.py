@@ -20,10 +20,9 @@ MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
 HISTORY = os.path.join(ROOT, "repository", "history")
-if ROOT not in sys.path:
-    sys.path.append(ROOT)
+if ROOT not in sys.path: sys.path.append(ROOT)
 
-from finance.technicals import TechnicalCalculator, BarsFile
+from finance.technicals import TechnicalCalculator, HistoryFile
 from finance.exposures import ExposureCalculator
 from finance.securities import OptionCalculator
 from finance.strategies import StrategyCalculator
@@ -53,8 +52,8 @@ __license__ = "MIT License"
 class HoldingDirectorySource(Directory, Source, query=Querys.Contract, signature="->contract"): pass
 class HoldingLoaderProcess(Loader, Algorithm, query=Querys.Contract, signature="contract->holdings"): pass
 class ExposureCalculatorProcess(ExposureCalculator, Algorithm, signature="holdings->exposures"): pass
-class BarsLoaderProcess(Loader, Algorithm, query=Querys.Symbol, signature="contract->bars"): pass
-class StatisticCalculatorProcess(TechnicalCalculator, Algorithm, signature="bars->statistics"): pass
+class HistoryLoaderProcess(Loader, Algorithm, query=Querys.Symbol, signature="contract->history"): pass
+class StatisticCalculatorProcess(TechnicalCalculator, Algorithm, signature="history->statistics"): pass
 class OptionCalculatorProcess(OptionCalculator, Algorithm, signature="(exposures,statistics)->options"): pass
 class OptionFilterOperation(Filter, Algorithm, query=Querys.Contract, signature="options->options"): pass
 class StrategyCalculatorProcess(StrategyCalculator, Algorithm, signature="options->strategies", assemble=False): pass
@@ -123,7 +122,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     divestiture_header = ProspectHeader(name="DivestitureHeader", valuation=Variables.Valuations.ARBITRAGE)
     divestiture_table = ProspectTable(name="DivestitureTable", layout=divestiture_layout, header=divestiture_header)
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO)
-    bars_file = BarsFile(name="BarsFile", repository=HISTORY)
+    history_file = HistoryFile(name="HistoryFile", repository=HISTORY)
     divestiture_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
     divestiture_protocols = DivestitureProtocols(namespace)
     valuation_criterion = ValuationCriterion(namespace)
@@ -132,7 +131,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
 
     holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, mode="r")
     holding_loader = HoldingLoaderProcess(name="HoldingLoader", file=holding_file, mode="r")
-    bars_loader = BarsLoaderProcess(name="BarsLoader", file=bars_file, mode="r")
+    history_loader = HistoryLoaderProcess(name="BarsLoader", file=history_file, mode="r")
     statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
     exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
     option_calculator = OptionCalculatorProcess(name="OptionCalculator", assumptions=option_assumptions)
@@ -153,7 +152,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator")
     holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a")
 
-    valuations_process = holding_directory + holding_loader + exposure_calculator + bars_loader + statistic_calculator + option_calculator + option_filter
+    valuations_process = holding_directory + holding_loader + exposure_calculator + history_loader + statistic_calculator + option_calculator + option_filter
     valuations_process = valuations_process + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter
     valuations_process = valuations_process + prospect_calculator + order_calculator + stability_calculator + stability_filter + prospect_writer
     divestiture_process = prospect_reader + prospect_unpivot + holding_calculator + holding_saver

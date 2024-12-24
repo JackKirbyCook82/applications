@@ -20,8 +20,7 @@ MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 MARKET = os.path.join(ROOT, "repository", "market")
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
-if ROOT not in sys.path:
-    sys.path.append(ROOT)
+if ROOT not in sys.path: sys.path.append(ROOT)
 
 from finance.securities import OptionFile
 from finance.strategies import StrategyCalculator
