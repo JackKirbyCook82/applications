@@ -62,27 +62,9 @@ class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, acce
 class ETradeDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
 class ETradeReader(WebReader, delay=10): pass
 
-class SizingCriterion(Naming, fields=["size", "volume", "interest"]): pass
-class ProfitCriterion(Naming, fields=["apy", "cost"]): pass
 
-class OptionCriterion(object, named={"sizing": SizingCriterion, "profit": ProfitCriterion}, metaclass=NamingMeta):
-    def __iter__(self): return iter([self.interest, self.volume, self.size, self.date])
-
-    def date(self, table): return table["current"].dt.date == self.timing.current.date()
-    def interest(self, table): return table["interest"] >= self.sizing.interest
-    def volume(self, table): return table["volume"] >= self.sizing.volume
-    def size(self, table): return table["size"] >= self.sizing.size
-
-class ValuationCriterion(object, named={"sizing": SizingCriterion, "profit": ProfitCriterion}, metaclass=NamingMeta):
-    def __iter__(self): return iter([self.apy, self.cost, self.size])
-
-    def apy(self, table): return table[("apy", Variables.Scenarios.MINIMUM)] >= self.profit.apy
-    def cost(self, table): return table[("cost", Variables.Scenarios.MINIMUM)] <= self.profit.cost
-    def size(self, table): return table[("size", "")] >= self.sizing.size
-
-
-def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
-    with ETradeDriver(name="PaperTradeTerminal", port=8989) as driver:
+def main(*args, **kwargs):
+    with ETradeDriver(name="PaperTradeTerminal", port=8989) as source:
         pass
 
 
@@ -90,15 +72,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     logging.getLogger("seleniumwire").setLevel(logging.ERROR)
     warnings.filterwarnings("ignore")
-    with open(API, "r") as apifile:
-        sysAPIKey, sysAPICode = [str(string).strip() for string in str(apifile.read()).split("\n")]
-        sysAPI = ETradeAPI(sysAPIKey, sysAPICode)
-    sysSizing = dict(size=10, volume=100, interest=100)
-    sysProfit = dict(apy=1.00, cost=100000)
-    sysArguments = dict(api=sysAPI)
-    sysParameters = dict(discount=0.00, fees=0.00)
-    sysNamespace = dict(sizing=sysSizing, profit=sysProfit)
-    main(arguments=sysArguments, parameters=sysParameters, namespace=sysNamespace)
+    main()
 
 
 

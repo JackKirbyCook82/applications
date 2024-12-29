@@ -97,7 +97,7 @@ if __name__ == "__main__":
         sysAPIKey, sysAPICode = [str(string).strip() for string in str(apifile.read()).split("\n")]
         sysAPI = ETradeAPI(sysAPIKey, sysAPICode)
     with open(TICKERS, "r") as tickerfile:
-        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")][0:2]
+        sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysSizing = dict(size=0, volume=0, interest=0)
