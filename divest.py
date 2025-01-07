@@ -19,10 +19,10 @@ from datetime import timedelta as TimeDelta
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 PORTFOLIO = os.path.join(ROOT, "repository", "portfolio")
-HISTORY = os.path.join(ROOT, "repository", "history")
+HISTORY = os.path.join(ROOT, "repository", "technical")
 if ROOT not in sys.path: sys.path.append(ROOT)
 
-from finance.technicals import TechnicalCalculator, HistoryFile
+from finance.technicals import StatisticCalculator, HistoryFile
 from finance.exposures import ExposureCalculator
 from finance.securities import OptionCalculator
 from finance.strategies import StrategyCalculator
@@ -53,7 +53,7 @@ class HoldingDirectorySource(Directory, Source, query=Querys.Contract, signature
 class HoldingLoaderProcess(Loader, Algorithm, query=Querys.Contract, signature="contract->holdings"): pass
 class ExposureCalculatorProcess(ExposureCalculator, Algorithm, signature="holdings->exposures"): pass
 class HistoryLoaderProcess(Loader, Algorithm, query=Querys.Symbol, signature="contract->history"): pass
-class StatisticCalculatorProcess(TechnicalCalculator, Algorithm, signature="history->statistics"): pass
+class StatisticCalculatorProcess(StatisticCalculator, Algorithm, signature="history->statistics"): pass
 class OptionCalculatorProcess(OptionCalculator, Algorithm, signature="(exposures,statistics)->options"): pass
 class OptionFilterOperation(Filter, Algorithm, query=Querys.Contract, signature="options->options"): pass
 class StrategyCalculatorProcess(StrategyCalculator, Algorithm, signature="options->strategies", assemble=False): pass
@@ -132,7 +132,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, mode="r")
     holding_loader = HoldingLoaderProcess(name="HoldingLoader", file=holding_file, mode="r")
     history_loader = HistoryLoaderProcess(name="BarsLoader", file=history_file, mode="r")
-    statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", technical=Variables.Technicals.STATISTIC)
+    statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator")
     exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
     option_calculator = OptionCalculatorProcess(name="OptionCalculator", assumptions=option_assumptions)
     option_filter = OptionFilterOperation(name="OptionFilter", criterion=list(option_criterion))
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
-    sysCurrent = Datetime(year=2024, month=11, day=6, hour=21, minute=0)
+    sysCurrent = Datetime(year=2025, month=1, day=6, hour=18, minute=0)
     sysTenure = TimeDelta(days=1)
     sysPricing = Variables.Pricing.BLACKSCHOLES
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)

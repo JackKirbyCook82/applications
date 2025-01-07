@@ -11,6 +11,7 @@ import sys
 import logging
 import warnings
 from collections import namedtuple as ntuple
+from datetime import datetime as Datetime
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -20,6 +21,7 @@ API = os.path.join(ROOT, "applications", "api.txt")
 if ROOT not in sys.path: sys.path.append(ROOT)
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
+from etrade.papertrade import ETradeTerminalWindow
 from finance.variables import Variables, Querys
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -29,9 +31,7 @@ from webscraping.webdrivers import WebDriver, WebBrowser
 from support.pipelines import Producer, Processor, Consumer
 from support.queues import Dequeuer
 from support.transforms import Pivot
-from support.meta import NamingMeta
 from support.filters import Filter
-from support.mixins import Naming
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -59,13 +59,24 @@ class ProspectCalculatorProcessor(ProspectCalculator, Processor): pass
 class ProspectWriterConsumer(ProspectWriter, Consumer, query=Querys.Contract): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
-class ETradeDriver(WebDriver, browser=WebBrowser.CHROME, executable=CHROME, delay=10): pass
+class ETradeDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10): pass
 class ETradeReader(WebReader, delay=10): pass
+
+Stock = ntuple("Stock", "action quantity")
+Option = ntuple("Option", "action quantity option expire strike")
+Order = ntuple("Order", "ticker securities order price")
 
 
 def main(*args, **kwargs):
+    expire = Datetime(year=2025, month=2, day=25).date()
+    stock = Stock(Variables.Actions.BUY, 100)
+    put = Option(Variables.Actions.BUY, 1, Variables.Options.PUT, expire, 410)
+    call = Option(Variables.Actions.SELL, 1, Variables.Options.CALL, expire, 410)
+    order = Order("TSLA", [stock], [put, call], Variables.Orders.LIMITDEBIT)
+
     with ETradeDriver(name="PaperTradeTerminal", port=8989) as source:
-        pass
+        window = ETradeTerminalWindow(*args, source=source, **kwargs)
+        window.execute(order, *args, **kwargs)
 
 
 if __name__ == "__main__":

@@ -61,7 +61,7 @@ def main(*args, arguments={}, parameters={}, **kwargs):
     with YahooDriver(name="HistoryReader") as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
         history_downloader = HistoryDownloaderProcessor(name="HistoryDownloader", source=source)
-        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="a")
+        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="w")
 
         history_pipeline = symbol_dequeue + history_downloader + history_saver
         history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(**parameters)
