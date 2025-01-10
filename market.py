@@ -101,7 +101,7 @@ if __name__ == "__main__":
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysSizing = dict(size=0, volume=0, interest=0)
-    sysArguments = dict(api=sysAPI, symbols=sysSymbols)
+    sysArguments = dict(symbols=sysSymbols, api=sysAPI)
     sysParameters = dict(expires=sysExpires)
     sysNamespace = dict(sizing=sysSizing)
     main(arguments=sysArguments, parameters=sysParameters, namespace=sysNamespace)

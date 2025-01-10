@@ -175,11 +175,11 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
-    sysCurrent = Datetime(year=2025, month=1, day=6, hour=18, minute=0)
+    sysCurrent = Datetime(year=2025, month=1, day=10, hour=16, minute=0)
     sysTenure = TimeDelta(days=1)
     sysPricing = Variables.Pricing.BLACKSCHOLES
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)
-    sysTrading = dict(discount=0.00, liquidity=25, capacity=1)
+    sysTrading = dict(discount=0.25, liquidity=25, capacity=1)
     sysSizing = dict(size=10, volume=100, interest=100)
     sysProfit = dict(apy=0.00, cost=0)
     sysParameters = dict(discount=0.00, fees=0.00, period=252)

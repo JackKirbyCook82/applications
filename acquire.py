@@ -161,7 +161,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     xr.set_options(display_width=250)
-    sysCurrent = Datetime(year=2025, month=1, day=6, hour=18, minute=0)
+    sysCurrent = Datetime(year=2025, month=1, day=10, hour=16, minute=0)
     sysTenure = TimeDelta(days=1)
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)
     sysTrading = dict(discount=2.00, liquidity=25, capacity=25)
