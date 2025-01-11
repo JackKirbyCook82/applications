@@ -64,19 +64,19 @@ class ETradeReader(WebReader, delay=10): pass
 
 Stock = ntuple("Stock", "action quantity")
 Option = ntuple("Option", "action quantity option expire strike")
-Order = ntuple("Order", "ticker securities order price")
+Order = ntuple("Order", "ticker stocks options order price")
 
 
 def main(*args, **kwargs):
     expire = Datetime(year=2025, month=2, day=25).date()
     stock = Stock(Variables.Actions.BUY, 100)
-    put = Option(Variables.Actions.BUY, 1, Variables.Options.PUT, expire, 410)
-    call = Option(Variables.Actions.SELL, 1, Variables.Options.CALL, expire, 410)
-    order = Order("TSLA", [stock], [put, call], Variables.Orders.LIMITDEBIT)
+    put = Option(Variables.Actions.BUY, 1, Variables.Options.PUT, expire, 235)
+    call = Option(Variables.Actions.SELL, 1, Variables.Options.CALL, expire, 235)
+    order = Order("AAPL", [stock], [put, call], Variables.Orders.LIMITDEBIT, 235)
 
     with ETradeDriver(name="PaperTradeTerminal", port=8989) as source:
         window = ETradeTerminalWindow(*args, source=source, **kwargs)
-        window.execute(order, *args, **kwargs)
+        window.execute(order, *args, timeout=15, **kwargs)
 
 
 if __name__ == "__main__":
