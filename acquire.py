@@ -27,7 +27,7 @@ from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator, ProspectReader, ProspectWriter, ProspectDiscarding, ProspectProtocols, ProspectTable, ProspectHeader, ProspectLayout
 from finance.holdings import HoldingCalculator, HoldingFile
-from finance.variables import Variables, Querys
+from finance.variables import Variables, Categories, Querys
 from support.pipelines import Routine, Producer, Processor, Consumer
 from support.synchronize import RoutineThread, RepeatingThread
 from support.files import Loader, Saver, Directory
@@ -118,7 +118,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, mode="r")
     option_loader = OptionLoaderProcessor(name="OptionLoader", file=option_file, mode="r")
     option_filter = OptionFilterProcessor(name="OptionFilter", criterion=list(option_criterion))
-#    strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=Variables.Strategies)
+    strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=list(Categories.Strategies))
     valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(acquisition_header.transform))
     valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=list(valuation_criterion))

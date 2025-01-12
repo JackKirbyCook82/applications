@@ -31,7 +31,7 @@ from finance.prospects import ProspectCalculator, ProspectReader, ProspectWriter
 from finance.orders import OrderCalculator
 from finance.stability import StabilityCalculator, StabilityFilter
 from finance.holdings import HoldingCalculator, HoldingFile
-from finance.variables import Variables, Querys
+from finance.variables import Variables, Categories, Querys
 from support.pipelines import Routine, Producer, Processor, Consumer
 from support.files import Loader, Saver, Directory
 from support.algorithms import Source, Algorithm
@@ -136,7 +136,7 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
     option_calculator = OptionCalculatorProcess(name="OptionCalculator", assumptions=option_assumptions)
     option_filter = OptionFilterOperation(name="OptionFilter", criterion=list(option_criterion))
-#    strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=Variables.Strategies)
+    strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=list(Categories.Strategies))
     valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
     valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(divestiture_header.transform))
     valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=list(valuation_criterion))
