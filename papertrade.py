@@ -22,7 +22,7 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
 from etrade.papertrade import ETradeTerminalWindow
-from finance.variables import Variables, Querys
+from finance.variables import Variables, Categories, Querys
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator, ProspectWriter
@@ -62,17 +62,20 @@ class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, acce
 class ETradeDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10): pass
 class ETradeReader(WebReader, delay=10): pass
 
-Stock = ntuple("Stock", "action quantity")
-Option = ntuple("Option", "action quantity option expire strike")
-Order = ntuple("Order", "ticker stocks options order price")
+Contract = ntuple("Contract", "ticker expire")
+Stock = ntuple("Stock", "action quantity instrument")
+Option = ntuple("Option", "action quantity instrument option strike")
+Transaction = ntuple("Transaction", "terms price")
+Order = ntuple("Order", "contract securities transaction")
 
 
 def main(*args, **kwargs):
-    expire = Datetime(year=2025, month=2, day=25).date()
-    stock = Stock(Variables.Actions.BUY, 100)
-    put = Option(Variables.Actions.BUY, 1, Variables.Options.PUT, expire, 235)
-    call = Option(Variables.Actions.SELL, 1, Variables.Options.CALL, expire, 235)
-    order = Order("AAPL", [stock], [put, call], Variables.Orders.LIMITDEBIT, 235)
+    contract = Contract("AAPL", Datetime(year=2025, month=2, day=25).date())
+    stock = Stock(Variables.Actions.BUY, 100, Variables.Instruments.STOCK)
+    put = Option(Variables.Actions.BUY, 1, Variables.Instruments.OPTION, Variables.Options.PUT, 235)
+    call = Option(Variables.Actions.SELL, 1, Variables.Instruments.OPTION, Variables.Options.CALL, 235)
+    transaction = (Variables.Terms.LIMITDEBIT, 235)
+    order = Order(contract, [stock, put, call], transaction)
 
     with ETradeDriver(name="PaperTradeTerminal", port=8989) as source:
         window = ETradeTerminalWindow(*args, source=source, **kwargs)
