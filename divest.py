@@ -152,20 +152,29 @@ def main(*args, parameters={}, namespace={}, **kwargs):
     holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator")
     holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a")
 
-    valuations_process = holding_directory + holding_loader + exposure_calculator + history_loader + statistic_calculator + option_calculator + option_filter
-    valuations_process = valuations_process + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter
-    valuations_process = valuations_process + prospect_calculator + order_calculator + stability_calculator + stability_filter + prospect_writer
+    valuation_process = holding_directory + holding_loader + exposure_calculator + history_loader + statistic_calculator + option_calculator + option_filter
+    valuation_process = valuation_process + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter
+    valuation_process = valuation_process + prospect_calculator + order_calculator + stability_calculator + stability_filter + prospect_writer
     divestiture_process = prospect_reader + prospect_unpivot + holding_calculator + holding_saver
-    valuations_thread = RepeatingThread(valuations_process, name="ValuationThread", wait=10).setup(**parameters)
+    valuation_thread = RepeatingThread(valuation_process, name="ValuationThread", wait=10).setup(**parameters)
     discarding_thread = RepeatingThread(prospect_discarding, name="DiscardingThread", wait=10).setup(**parameters)
     protocol_thread = RepeatingThread(prospect_protocol, name="AlteringThread", wait=10).setup(**parameters)
     divestiture_thread = RepeatingThread(divestiture_process, name="AlteringThread", wait=10).setup(**parameters)
 
-    valuations_thread.start()
-    while True:
+    divestiture_thread.start()
+    protocol_thread.start()
+    discarding_thread.start()
+    valuation_thread.start()
+    while bool(valuation_thread) or bool(divestiture_table):
         if bool(divestiture_table): print(divestiture_table)
         time.sleep(10)
-    valuations_thread.join()
+    discarding_thread.cease()
+    protocol_thread.cease()
+    divestiture_thread.cease()
+    valuation_thread.join()
+    discarding_thread.join()
+    protocol_thread.join()
+    divestiture_thread.join()
 
 
 if __name__ == "__main__":
@@ -181,7 +190,7 @@ if __name__ == "__main__":
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)
     sysTrading = dict(discount=0.00, liquidity=10, capacity=1)
     sysSizing = dict(size=10, volume=100, interest=100)
-    sysProfit = dict(apy=0.00, cost=0)
+    sysProfit = dict(apy=0.00, cost=1000)
     sysParameters = dict(discount=0.00, fees=0.00, period=252)
     sysNamespace = dict(pricing=sysPricing, timing=sysTiming, sizing=sysSizing, profit=sysProfit, trading=sysTrading)
     main(parameters=sysParameters, namespace=sysNamespace)

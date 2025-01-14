@@ -166,7 +166,7 @@ if __name__ == "__main__":
     sysTiming = dict(current=sysCurrent, tenure=sysTenure)
     sysTrading = dict(discount=2.00, liquidity=25, capacity=25)
     sysSizing = dict(size=10, volume=100, interest=100)
-    sysProfit = dict(apy=1.00, cost=100000)
+    sysProfit = dict(apy=1.00, cost=1000)
     sysParameters = dict(discount=0.00, fees=0.00)
     sysNamespace = dict(timing=sysTiming, sizing=sysSizing, profit=sysProfit, trading=sysTrading)
     main(parameters=sysParameters, namespace=sysNamespace)
