@@ -44,21 +44,21 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class OptionDirectoryProducer(Directory, Producer, query=Querys.Contract): pass
-class OptionLoaderProcessor(Loader, Processor, query=Querys.Contract): pass
-class OptionFilterProcessor(Filter, Processor, query=Querys.Contract): pass
+class OptionDirectoryProducer(Directory, Producer): pass
+class OptionLoaderProcessor(Loader, Processor): pass
+class OptionFilterProcessor(Filter, Processor): pass
 class StrategyCalculatorProcessor(StrategyCalculator, Processor): pass
 class ValuationCalculatorProcessor(ValuationCalculator, Processor): pass
-class ValuationPivotProcessor(Pivot, Processor, query=Querys.Contract): pass
-class ValuationFilterProcessor(Filter, Processor, query=Querys.Contract): pass
+class ValuationPivotProcessor(Pivot, Processor): pass
+class ValuationFilterProcessor(Filter, Processor): pass
 class ProspectCalculatorProcessor(ProspectCalculator, Processor): pass
-class ProspectWriterConsumer(ProspectWriter, Consumer, query=Querys.Contract): pass
-class ProspectDiscardingRoutine(ProspectDiscarding, Routine, query=Querys.Contract): pass
-class ProspectProtocolsRoutine(ProspectProtocols, Routine, query=Querys.Contract): pass
-class ProspectReaderProducer(ProspectReader, Producer, query=Querys.Contract): pass
-class ProspectUnpivotProcessor(Unpivot, Processor, query=Querys.Contract): pass
+class ProspectWriterConsumer(ProspectWriter, Consumer): pass
+class ProspectDiscardingRoutine(ProspectDiscarding, Routine): pass
+class ProspectProtocolsRoutine(ProspectProtocols, Routine): pass
+class ProspectReaderProducer(ProspectReader, Producer): pass
+class ProspectUnpivotProcessor(Unpivot, Processor): pass
 class HoldingCalculatorProcessor(HoldingCalculator, Processor): pass
-class HoldingSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
+class HoldingSaverConsumer(Saver, Consumer): pass
 
 class AcquisitionTrading(Naming, fields=["discount", "liquidity", "capacity"]): pass
 class AcquisitionSizing(Naming, fields=["size", "volume", "interest"]): pass
@@ -104,32 +104,29 @@ class AcquisitionProtocols(object, named={"trading": AcquisitionTrading, "timing
     def accept(self, table): return self.limited((table["status"] == Variables.Status.PENDING) & self.liquid(table))
 
 
-def main(*args, parameters={}, namespace={}, **kwargs):
+def main(*args, arguments={}, parameters={}, **kwargs):
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO)
     option_file = OptionFile(name="OptionFile", repository=MARKET)
     acquisition_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
-    acquisition_protocols = AcquisitionProtocols(namespace)
-    valuation_criterion = ValuationCriterion(namespace)
-    option_criterion = OptionCriterion(namespace)
 
-    option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, mode="r")
-    option_loader = OptionLoaderProcessor(name="OptionLoader", file=option_file, mode="r")
-    option_filter = OptionFilterProcessor(name="OptionFilter", criterion=list(option_criterion))
-    strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=list(Categories.Strategies))
-    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
-    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(acquisition_header.transform))
-    valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=list(valuation_criterion))
-    prospect_calculator = ProspectCalculatorProcessor(name="ProspectCalculator", header=acquisition_header, priority=acquisition_priority)
-    prospect_writer = ProspectWriterConsumer(name="ProspectWriter", table=acquisition_table, status=Variables.Status.PROSPECT)
-    prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=acquisition_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED])
-    prospect_protocol = ProspectProtocolsRoutine(name="ProspectAltering", table=acquisition_table, protocols=dict(acquisition_protocols))
-    prospect_reader = ProspectReaderProducer(name="ProspectReader", table=acquisition_table, status=[Variables.Status.ACCEPTED])
-    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", header=tuple(acquisition_header.transform))
-    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator")
-    holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a")
+    option_directory = OptionDirectoryProducer(name="OptionDirectory", file=option_file, mode="r", query=Querys.Contract)
+    option_loader = OptionLoaderProcessor(name="OptionLoader", file=option_file, mode="r", query=Querys.Contract)
+    option_filter = OptionFilterProcessor(name="OptionFilter", criterion=, query=Querys.Contract)
+    strategy_calculator = StrategyCalculatorProcessor(name="StrategyCalculator", strategies=list(Categories.Strategies), query=Querys.Contract)
+    valuation_calculator = ValuationCalculatorProcessor(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
+    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(acquisition_header.transform), query=Querys.Contract)
+    valuation_filter = ValuationFilterProcessor(name="ValuationFilter", criterion=, query=Querys.Contract)
+    prospect_calculator = ProspectCalculatorProcessor(name="ProspectCalculator", header=acquisition_header, priority=acquisition_priority, query=Querys.Contract)
+    prospect_writer = ProspectWriterConsumer(name="ProspectWriter", table=acquisition_table, status=Variables.Status.PROSPECT, query=Querys.Contract)
+    prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=acquisition_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED], query=Querys.Contract)
+    prospect_protocol = ProspectProtocolsRoutine(name="ProspectAltering", table=acquisition_table, protocols=, query=Querys.Contract)
+    prospect_reader = ProspectReaderProducer(name="ProspectReader", table=acquisition_table, status=[Variables.Status.ACCEPTED], query=Querys.Contract)
+    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", header=tuple(acquisition_header.transform), query=Querys.Contract)
+    holding_calculator = HoldingCalculatorProcessor(name="HoldingCalculator", query=Querys.Contract)
+    holding_saver = HoldingSaverConsumer(name="HoldingSaver", file=holding_file, mode="a", query=Querys.Contract)
 
     valuation_process = option_directory + option_loader + option_filter + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter + prospect_calculator + prospect_writer
     acquisition_process = prospect_reader + prospect_unpivot + holding_calculator + holding_saver

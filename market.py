@@ -30,9 +30,6 @@ from support.pipelines import Producer, Processor, Consumer
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.meta import NamingMeta
-from support.filters import Filter
-from support.mixins import Naming
 from support.files import Saver
 
 __version__ = "1.0.0"
@@ -52,36 +49,25 @@ class SymbolDequeuerProducer(Dequeuer, Producer): pass
 class StockDownloaderProcessor(ETradeStockDownloader, Processor): pass
 class ProductDownloaderProcessor(ETradeProductDownloader, Processor): pass
 class OptionDownloaderProcessor(ETradeOptionDownloader, Processor): pass
-class OptionFilterProcessor(Filter, Processor, query=Querys.Contract): pass
-class OptionSaverConsumer(Saver, Consumer, query=Querys.Contract): pass
+class OptionSaverConsumer(Saver, Consumer): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
-
-class OptionSizing(Naming, fields=["size", "volume", "interest"]): pass
-class OptionCriterion(object, named={"sizing": OptionSizing}, metaclass=NamingMeta):
-    def __iter__(self): return iter([self.interest, self.volume, self.size])
-
-    def interest(self, table): return table["interest"] >= self.sizing.interest
-    def volume(self, table): return table["volume"] >= self.sizing.volume
-    def size(self, table): return table["size"] >= self.sizing.size
 
 
 def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
     security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"].key, apicode=arguments["api"].code)
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
     option_file = OptionFile(name="OptionFile", repository=MARKET)
-    option_criterion = OptionCriterion(namespace)
 
     with ETradeReader(name="MarketReader", authorizer=security_authorizer) as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolsDequeuer", queue=symbol_queue)
         stock_downloader = StockDownloaderProcessor(name="StockDownloader", source=source)
         product_downloader = ProductDownloaderProcessor(name="ProductDownloader", source=source)
         option_downloader = OptionDownloaderProcessor(name="OptionDownloader", source=source)
-        option_filter = OptionFilterProcessor(name="OptionFilter", criterion=list(option_criterion))
-        option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a")
+        option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a", query=Querys.Contract)
 
-        market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_filter + option_saver
+        market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_saver
         market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(**parameters)
         market_thread.start()
         market_thread.join()
@@ -100,11 +86,9 @@ if __name__ == "__main__":
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
     sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysSizing = dict(size=0, volume=0, interest=0)
     sysArguments = dict(symbols=sysSymbols, api=sysAPI)
     sysParameters = dict(expires=sysExpires)
-    sysNamespace = dict(sizing=sysSizing)
-    main(arguments=sysArguments, parameters=sysParameters, namespace=sysNamespace)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

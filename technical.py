@@ -40,13 +40,13 @@ __license__ = "MIT License"
 
 class SymbolDequeuerProducer(Dequeuer, Producer): pass
 class HistoryDownloaderProcessor(YahooHistoryDownloader, Processor): pass
-class HistorySaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
-class HistoryDirectoryProducer(Directory, Producer, query=Querys.Symbol): pass
-class HistoryLoaderProcessor(Loader, Processor, query=Querys.Symbol): pass
+class HistorySaverConsumer(Saver, Consumer): pass
+class HistoryDirectoryProducer(Directory, Producer): pass
+class HistoryLoaderProcessor(Loader, Processor): pass
 class StatisticCalculatorProcessor(StatisticCalculator, Processor): pass
 class StochasticCalculatorProcessor(StochasticCalculator, Processor): pass
-class StatisticSaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
-class StochasticSaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
+class StatisticSaverConsumer(Saver, Consumer): pass
+class StochasticSaverConsumer(Saver, Consumer): pass
 
 class YahooDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10):
     pass
@@ -61,7 +61,7 @@ def main(*args, arguments={}, parameters={}, **kwargs):
     with YahooDriver(name="HistoryReader") as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
         history_downloader = HistoryDownloaderProcessor(name="HistoryDownloader", source=source)
-        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="w")
+        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="w", query=Querys.Symbol)
 
         history_pipeline = symbol_dequeue + history_downloader + history_saver
         history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(**parameters)
