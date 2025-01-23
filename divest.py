@@ -15,6 +15,7 @@ import pandas as pd
 import xarray as xr
 from datetime import datetime as Datetime
 from datetime import timedelta as TimeDelta
+from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -24,10 +25,10 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 
 from finance.technicals import StatisticCalculator, HistoryFile
 from finance.exposures import ExposureCalculator
-from finance.securities import OptionCalculator, OptionBasis
+from finance.securities import OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
-from finance.prospects import ProspectCalculator, ProspectReader, ProspectWriter, ProspectDiscarding, ProspectProtocols, ProspectTable, ProspectHeader, ProspectLayout
+from finance.prospects import ProspectCalculator, ProspectReader, ProspectWriter, ProspectDiscarding, ProspectProtocol, ProspectProtocols, ProspectTable, ProspectHeader, ProspectLayout
 from finance.orders import OrderCalculator
 from finance.stability import StabilityCalculator, StabilityFilter
 from finance.holdings import HoldingCalculator, HoldingFile
@@ -37,10 +38,7 @@ from support.files import Loader, Saver, Directory
 from support.algorithms import Source, Algorithm
 from support.synchronize import RepeatingThread
 from support.transforms import Pivot, Unpivot
-from support.decorators import Decorator
-from support.meta import NamingMeta
 from support.filters import Filter
-from support.mixins import Naming
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -49,54 +47,52 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class HoldingDirectorySource(Directory, Source, signature="->contract"): pass
-class HoldingLoaderProcess(Loader, Algorithm, signature="contract->holdings"): pass
-class ExposureCalculatorProcess(ExposureCalculator, Algorithm, signature="holdings->exposures"): pass
+class HoldingDirectorySource(Directory, Source, query=Querys.Settlement, signature="->contract"): pass
+class HoldingLoaderProcess(Loader, Algorithm, query=Querys.Settlement, signature="contract->holdings"): pass
+class ExposureCalculatorProcess(ExposureCalculator, Algorithm, query=Querys.Settlement, signature="holdings->exposures"): pass
 class HistoryLoaderProcess(Loader, Algorithm, query=Querys.Symbol, signature="contract->history"): pass
-class StatisticCalculatorProcess(StatisticCalculator, Algorithm, signature="history->statistics"): pass
-class OptionCalculatorProcess(OptionCalculator, Algorithm, signature="(exposures,statistics)->options"): pass
-class OptionFilterOperation(Filter, Algorithm, signature="options->options"): pass
-class StrategyCalculatorProcess(StrategyCalculator, Algorithm, signature="options->strategies", assemble=False): pass
-class ValuationCalculatorProcess(ValuationCalculator, Algorithm, signature="strategies->valuations"): pass
-class ValuationPivotProcessor(Pivot, Algorithm, signature="valuations->valuations"): pass
-class ValuationFilterProcess(Filter, Algorithm, signature="valuations->valuations"): pass
-class ProspectCalculatorProcess(ProspectCalculator, Algorithm, signature="valuations->prospects"): pass
-class OrderCalculatorProcess(OrderCalculator, Algorithm, signature="prospects->orders"): pass
-class StabilityCalculatorProcess(StabilityCalculator, Algorithm, signature="(orders,exposures)->stabilities"): pass
-class StabilityFilterProcess(StabilityFilter, Algorithm, signature="(prospects,stabilities)->prospects"): pass
-class ProspectUnpivotProcessor(Unpivot, Algorithm, signature="prospects->prospects"): pass
-class ProspectWriterProcess(ProspectWriter, Algorithm, signature="prospects->"): pass
-class ProspectDiscardingRoutine(ProspectDiscarding, Routine): pass
-class ProspectProspectsRoutine(ProspectProtocols, Routine): pass
-class ProspectReaderSource(ProspectReader, Producer): pass
-class ProspectUnpivotProcessor(Unpivot, Processor): pass
-class HoldingCalculatorProcess(HoldingCalculator, Processor): pass
-class HoldingSaverProcess(Saver, Consumer): pass
+class StatisticCalculatorProcess(StatisticCalculator, Algorithm, query=Querys.Settlement, signature="history->statistics"): pass
+class OptionCalculatorProcess(OptionCalculator, Algorithm, query=Querys.Settlement, signature="(exposures,statistics)->options"): pass
+class OptionFilterOperation(Filter, Algorithm, query=Querys.Settlement, signature="options->options"): pass
+class StrategyCalculatorProcess(StrategyCalculator, Algorithm, query=Querys.Settlement, signature="options->strategies", assemble=False): pass
+class ValuationCalculatorProcess(ValuationCalculator, Algorithm, query=Querys.Settlement, signature="strategies->valuations"): pass
+class ValuationPivotProcessor(Pivot, Algorithm, query=Querys.Settlement, signature="valuations->valuations"): pass
+class ValuationFilterProcess(Filter, Algorithm, query=Querys.Settlement, signature="valuations->valuations"): pass
+class ProspectCalculatorProcess(ProspectCalculator, Algorithm, query=Querys.Settlement, signature="valuations->prospects"): pass
+class OrderCalculatorProcess(OrderCalculator, Algorithm, query=Querys.Settlement, signature="prospects->orders"): pass
+class StabilityCalculatorProcess(StabilityCalculator, Algorithm, query=Querys.Settlement, signature="(orders,exposures)->stabilities"): pass
+class StabilityFilterProcess(StabilityFilter, Algorithm, query=Querys.Settlement, signature="(prospects,stabilities)->prospects"): pass
+class ProspectUnpivotProcessor(Unpivot, Algorithm, query=Querys.Settlement, signature="prospects->prospects"): pass
+class ProspectWriterProcess(ProspectWriter, Algorithm, query=Querys.Settlement, signature="prospects->"): pass
+class ProspectDiscardingRoutine(ProspectDiscarding, Routine, query=Querys.Settlement): pass
+class ProspectProspectsRoutine(ProspectProtocols, Routine, query=Querys.Settlement): pass
+class ProspectReaderSource(ProspectReader, Producer, query=Querys.Settlement): pass
+class ProspectUnpivotProcessor(Unpivot, Processor, query=Querys.Settlement): pass
+class HoldingCalculatorProcess(HoldingCalculator, Processor, query=Querys.Settlement): pass
+class HoldingSaverProcess(Saver, Consumer, query=Querys.Settlement): pass
 
-class DivestitureTrading(Naming, fields=["discount", "liquidity", "capacity"]): pass
-class DivestitureSizing(Naming, fields=["size", "volume", "interest"]): pass
-class DivestitureTiming(Naming, fields=["current", "tenure"]): pass
-class DivestitureProfit(Naming, fields=["apy", "cost"]): pass
+class DivestitureTrading(ntuple("Trading", "discount liquidity capacity")): pass
+class DivestitureSizing(ntuple("Sizing", "size volume interest")): pass
+class DivestitureTiming(ntuple("Timing", "current tenure")): pass
+class DivestitureAccounting(ntuple("Accounting", "apy cost")): pass
+class DivestitureCodifying(ntuple("Codifying", "trading sizing timing")): pass
+class DivestitureCriterion(ntuple("Criterion", "sizing timing accounting")): pass
+class DivestitureCalculating(ntuple("Calculating", "pricing sizing timing")): pass
 
-class OptionAssumptions(Naming, fields=["pricing"], named={"sizing": DivestitureSizing, "timing": DivestitureTiming}): pass
-class OptionCriterion(object, named={"sizing": DivestitureSizing}, metaclass=NamingMeta):
-    def __iter__(self): return iter([self.interest, self.volume, self.size])
 
-    def interest(self, table): return table["interest"] >= self.sizing.interest
-    def volume(self, table): return table["volume"] >= self.sizing.volume
-    def size(self, table): return table["size"] >= self.sizing.size
-
-class ValuationCriterion(object, named={"sizing": DivestitureSizing, "profit": DivestitureProfit}, metaclass=NamingMeta):
-    def __iter__(self): return iter([self.apy, self.cost, self.size])
-
+class ValuationCriterion(DivestitureCriterion):
     def apy(self, table): return table[("apy", Variables.Scenarios.MINIMUM)] >= self.profit.apy
     def cost(self, table): return table[("cost", Variables.Scenarios.MINIMUM)] <= self.profit.cost
     def size(self, table): return table[("size", "")] >= self.sizing.size
 
-class DivestitureProtocol(Decorator): pass
-class DivestitureProtocols(object, named={"trading": DivestitureTrading, "timing": DivestitureTiming}, metaclass=NamingMeta):
-    def __iter__(self): return iter([(method, method["status"]) for method in [self.obsolete, self.abandon, self.pursue, self.reject, self.accept]])
+class OptionCriterion(DivestitureCriterion):
+    def interest(self, table): return table["interest"] >= self.sizing.interest
+    def volume(self, table): return table["volume"] >= self.sizing.volume
+    def size(self, table): return table["size"] >= self.sizing.size
 
+
+class DivestitureProtocol(ProspectProtocol): pass
+class DivestitureProtocols(DivestitureCodifying):
     def limited(self, mask): return (mask.cumsum() < self.trading.capacity + 1) & mask
     def timeout(self, table): return (pd.to_datetime(self.timing.current) - table["current"]) >= self.timing.tenure
     def obsolete(self, table): return (table["status"] == Variables.Status.PROSPECT) & self.timeout(table)
@@ -117,37 +113,46 @@ class DivestitureProtocols(object, named={"trading": DivestitureTrading, "timing
     def accept(self, table): return self.limited((table["status"] == Variables.Status.PENDING) & self.liquid(table))
 
 
-def main(*args, arguments={}, parameters={}, **kwargs):
+def main(*args, arguments, parameters, **kwargs):
+    divestiture_trading = DivestitureTrading(**arguments["trading"])
+    divestiture_sizing = DivestitureSizing(**arguments["sizing"])
+    divestiture_timing = DivestitureTiming(**arguments["timing"])
+    divestiture_accounting = DivestitureAccounting(**arguments["accounting"])
+    divestiture_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
+    divestiture_calculating = DivestitureCalculating(Variables.Pricing.BLACKSCHOLES, divestiture_sizing, divestiture_timing)
+    divestiture_protocols = DivestitureProtocols(**{"trading": divestiture_trading, "sizing": divestiture_sizing, "accounting": divestiture_accounting})
+    valuation_criterion = ValuationCriterion(**{"sizing": divestiture_sizing, "timing": divestiture_timing, "accounting": divestiture_accounting})
+    option_criterion = OptionCriterion(**{"sizing": divestiture_sizing, "timing": divestiture_timing, "accounting": divestiture_accounting})
+    prospect_protocols = [getattr(divestiture_protocols, attribute) for attribute in ("obsolete", "abandon", "pursue", "reject", "accept")]
+
     divestiture_layout = ProspectLayout(name="DivestitureLayout", valuation=Variables.Valuations.ARBITRAGE, rows=100)
     divestiture_header = ProspectHeader(name="DivestitureHeader", valuation=Variables.Valuations.ARBITRAGE)
     divestiture_table = ProspectTable(name="DivestitureTable", layout=divestiture_layout, header=divestiture_header)
     holding_file = HoldingFile(name="HoldingFile", repository=PORTFOLIO)
     history_file = HistoryFile(name="HistoryFile", repository=HISTORY)
-    option_basis = OptionBasis(Variables.Pricing.BLACKSCHOLES, arguments["size"], arguments["current"])
-    divestiture_priority = lambda cols: cols[("apy", Variables.Scenarios.MINIMUM)]
 
-    holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, mode="r", query=Querys.Contract)
-    holding_loader = HoldingLoaderProcess(name="HoldingLoader", file=holding_file, mode="r", query=Querys.Contract)
-    history_loader = HistoryLoaderProcess(name="BarsLoader", file=history_file, mode="r", query=Querys.Contract)
-    statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator", query=Querys.Contract)
-    exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator", query=Querys.Contract)
-    option_calculator = OptionCalculatorProcess(name="OptionCalculator", basis=option_basis, query=Querys.Contract)
-    option_filter = OptionFilterOperation(name="OptionFilter", criterion=, query=Querys.Contract)
-    strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=list(Categories.Strategies), query=Querys.Contract)
-    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE, query=Querys.Contract)
-    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(divestiture_header.transform), query=Querys.Contract)
-    valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=, query=Querys.Contract)
-    prospect_calculator = ProspectCalculatorProcess(name="ProspectCalculator", header=divestiture_header, priority=divestiture_priority, query=Querys.Contract)
-    order_calculator = OrderCalculatorProcess(name="OrderCalculator", query=Querys.Contract)
-    stability_calculator = StabilityCalculatorProcess(name="StabilityCalculator", query=Querys.Contract)
-    stability_filter = StabilityFilterProcess(name="StabilityFilter", query=Querys.Contract)
-    prospect_writer = ProspectWriterProcess(name="ProspectWriter", table=divestiture_table, status=Variables.Status.PROSPECT, query=Querys.Contract)
-    prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=divestiture_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED], query=Querys.Contract)
-    prospect_protocol = ProspectProspectsRoutine(name="ProspectAltering", table=divestiture_table, protocols=, query=Querys.Contract)
-    prospect_reader = ProspectReaderSource(name="ProspectReader", table=divestiture_table, status=[Variables.Status.ACCEPTED], query=Querys.Contract)
-    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", header=tuple(divestiture_header.transform), query=Querys.Contract)
-    holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator", query=Querys.Contract)
-    holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a", query=Querys.Contract)
+    holding_directory = HoldingDirectorySource(name="HoldingDirectory", file=holding_file, mode="r")
+    holding_loader = HoldingLoaderProcess(name="HoldingLoader", file=holding_file, mode="r")
+    history_loader = HistoryLoaderProcess(name="BarsLoader", file=history_file, mode="r")
+    statistic_calculator = StatisticCalculatorProcess(name="StatisticCalculator")
+    exposure_calculator = ExposureCalculatorProcess(name="ExposureCalculator")
+    option_calculator = OptionCalculatorProcess(name="OptionCalculator", calculation=divestiture_calculating)
+    option_filter = OptionFilterOperation(name="OptionFilter", criterion=[option_criterion.size])
+    strategy_calculator = StrategyCalculatorProcess(name="StrategyCalculator", strategies=list(Categories.Strategies))
+    valuation_calculator = ValuationCalculatorProcess(name="ValuationCalculator", valuation=Variables.Valuations.ARBITRAGE)
+    valuation_pivot = ValuationPivotProcessor(name="ValuationPivot", header=tuple(divestiture_header.transform))
+    valuation_filter = ValuationFilterProcess(name="ValuationFilter", criterion=[valuation_criterion.apy, valuation_criterion.size])
+    prospect_calculator = ProspectCalculatorProcess(name="ProspectCalculator", header=divestiture_header, priority=divestiture_priority)
+    order_calculator = OrderCalculatorProcess(name="OrderCalculator")
+    stability_calculator = StabilityCalculatorProcess(name="StabilityCalculator")
+    stability_filter = StabilityFilterProcess(name="StabilityFilter")
+    prospect_writer = ProspectWriterProcess(name="ProspectWriter", table=divestiture_table, status=Variables.Status.PROSPECT)
+    prospect_discarding = ProspectDiscardingRoutine(name="ProspectDiscarding", table=divestiture_table, status=[Variables.Status.OBSOLETE, Variables.Status.REJECTED, Variables.Status.ABANDONED])
+    prospect_protocol = ProspectProspectsRoutine(name="ProspectAltering", table=divestiture_table, protocols=list(prospect_protocols))
+    prospect_reader = ProspectReaderSource(name="ProspectReader", table=divestiture_table, status=[Variables.Status.ACCEPTED])
+    prospect_unpivot = ProspectUnpivotProcessor(name="ProspectUnpivot", header=tuple(divestiture_header.transform))
+    holding_calculator = HoldingCalculatorProcess(name="HoldingCalculator")
+    holding_saver = HoldingSaverProcess(name="HoldingSaver", file=holding_file, mode="a")
 
     valuation_process = holding_directory + holding_loader + exposure_calculator + history_loader + statistic_calculator + option_calculator + option_filter
     valuation_process = valuation_process + strategy_calculator + valuation_calculator + valuation_pivot + valuation_filter
@@ -183,14 +188,13 @@ if __name__ == "__main__":
     xr.set_options(display_width=250)
     sysCurrent = Datetime(year=2024, month=11, day=6, hour=18, minute=0)
     sysTenure = TimeDelta(days=1)
-    sysPricing = Variables.Pricing.BLACKSCHOLES
-    sysTiming = dict(current=sysCurrent, tenure=sysTenure)
     sysTrading = dict(discount=0.00, liquidity=10, capacity=1)
     sysSizing = dict(size=10, volume=100, interest=100)
-    sysProfit = dict(apy=0.00, cost=1000)
+    sysTiming = dict(current=sysCurrent, tenure=sysTenure)
+    sysAccounting = dict(apy=0.00, cost=1000)
+    sysArguments = dict(trading=sysTrading, sizing=sysSizing, timing=sysTiming, accounting=sysAccounting)
     sysParameters = dict(discount=0.00, fees=0.00, period=252)
-    sysNamespace = dict(pricing=sysPricing, timing=sysTiming, sizing=sysSizing, profit=sysProfit, trading=sysTrading)
-    main(parameters=sysParameters, namespace=sysNamespace)
+    main(arguments=sysArguments, parameters=sysParameters)
 
 
 

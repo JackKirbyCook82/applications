@@ -21,7 +21,7 @@ TICKERS = os.path.join(ROOT, "applications", "tickers.txt")
 CHROME = os.path.join(ROOT, "resources", "chromedriver.exe")
 if ROOT not in sys.path: sys.path.append(ROOT)
 
-from yahoo.technicals import YahooHistoryDownloader
+from yahoo.history import YahooHistoryDownloader
 from finance.variables import Querys
 from finance.technicals import StatisticCalculator, StochasticCalculator, HistoryFile, StatisticFile, StochasticFile
 from webscraping.webdrivers import WebDriver, WebBrowser
@@ -38,21 +38,21 @@ __copyright__ = "Copyright 2024, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolDequeuerProducer(Dequeuer, Producer): pass
-class HistoryDownloaderProcessor(YahooHistoryDownloader, Processor): pass
-class HistorySaverConsumer(Saver, Consumer): pass
-class HistoryDirectoryProducer(Directory, Producer): pass
-class HistoryLoaderProcessor(Loader, Processor): pass
-class StatisticCalculatorProcessor(StatisticCalculator, Processor): pass
-class StochasticCalculatorProcessor(StochasticCalculator, Processor): pass
-class StatisticSaverConsumer(Saver, Consumer): pass
-class StochasticSaverConsumer(Saver, Consumer): pass
+class SymbolDequeuerProducer(Dequeuer, Producer, query=Querys.Symbol): pass
+class HistoryDownloaderProcessor(YahooHistoryDownloader, Processor, query=Querys.Symbol): pass
+class HistorySaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
+class HistoryDirectoryProducer(Directory, Producer, query=Querys.Symbol): pass
+class HistoryLoaderProcessor(Loader, Processor, query=Querys.Symbol): pass
+class StatisticCalculatorProcessor(StatisticCalculator, Processor, query=Querys.Symbol): pass
+class StochasticCalculatorProcessor(StochasticCalculator, Processor, query=Querys.Symbol): pass
+class StatisticSaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
+class StochasticSaverConsumer(Saver, Consumer, query=Querys.Symbol): pass
 
 class YahooDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=10):
     pass
 
 
-def main(*args, arguments={}, parameters={}, **kwargs):
+def main(*args, arguments, parameters, **kwargs):
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
     stochastic_file = StochasticFile(name="StochasticFile", repository=TECHNICAL)
     statistic_file = StatisticFile(name="StatisticFile", repository=TECHNICAL)
@@ -61,7 +61,7 @@ def main(*args, arguments={}, parameters={}, **kwargs):
     with YahooDriver(name="HistoryReader") as source:
         symbol_dequeue = SymbolDequeuerProducer(name="SymbolDequeue", queue=symbol_queue)
         history_downloader = HistoryDownloaderProcessor(name="HistoryDownloader", source=source)
-        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="w", query=Querys.Symbol)
+        history_saver = HistorySaverConsumer(name="HistorySaver", file=history_file, mode="w")
 
         history_pipeline = symbol_dequeue + history_downloader + history_saver
         history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(**parameters)

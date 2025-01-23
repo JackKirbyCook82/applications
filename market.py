@@ -13,7 +13,6 @@ import warnings
 import pandas as pd
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
-from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -39,24 +38,23 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-ETradeAPI = ntuple("API", "key code")
 authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
 request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
-class SymbolDequeuerProducer(Dequeuer, Producer): pass
-class StockDownloaderProcessor(ETradeStockDownloader, Processor): pass
-class ProductDownloaderProcessor(ETradeProductDownloader, Processor): pass
-class OptionDownloaderProcessor(ETradeOptionDownloader, Processor): pass
-class OptionSaverConsumer(Saver, Consumer): pass
+class SymbolDequeuerProducer(Dequeuer, Producer, query=Querys.Symbol): pass
+class StockDownloaderProcessor(ETradeStockDownloader, Processor, query=Querys.Symbol): pass
+class ProductDownloaderProcessor(ETradeProductDownloader, Processor, query=Querys.Product): pass
+class OptionDownloaderProcessor(ETradeOptionDownloader, Processor, query=Querys.Settlement): pass
+class OptionSaverConsumer(Saver, Consumer, query=Querys.Settlement): pass
 
 class ETradeAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
 class ETradeReader(WebReader, delay=10): pass
 
 
-def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
-    security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"].key, apicode=arguments["api"].code)
+def main(*args, arguments, parameters, **kwargs):
+    security_authorizer = ETradeAuthorizer(name="MarketAuthorizer", apikey=arguments["api"]["key"], apicode=arguments["api"]["code"])
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=arguments["symbols"], capacity=None, timeout=None)
     option_file = OptionFile(name="OptionFile", repository=MARKET)
 
@@ -65,7 +63,7 @@ def main(*args, arguments={}, parameters={}, namespace={}, **kwargs):
         stock_downloader = StockDownloaderProcessor(name="StockDownloader", source=source)
         product_downloader = ProductDownloaderProcessor(name="ProductDownloader", source=source)
         option_downloader = OptionDownloaderProcessor(name="OptionDownloader", source=source)
-        option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a", query=Querys.Contract)
+        option_saver = OptionSaverConsumer(name="OptionSaver", file=option_file, mode="a")
 
         market_pipeline = symbol_dequeue + stock_downloader + product_downloader + option_downloader + option_saver
         market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(**parameters)
@@ -79,9 +77,10 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
+
     with open(API, "r") as apifile:
         sysAPIKey, sysAPICode = [str(string).strip() for string in str(apifile.read()).split("\n")]
-        sysAPI = ETradeAPI(sysAPIKey, sysAPICode)
+        sysAPI = {"key": sysAPIKey, "code": sysAPICode}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = [str(string).strip().upper() for string in tickerfile.read().split("\n")]
         sysSymbols = [Querys.Symbol(ticker) for ticker in sysTickers]
