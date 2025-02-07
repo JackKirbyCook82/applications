@@ -8,6 +8,7 @@ Created on Fri Jan 1 2025
 
 import os
 import sys
+import time
 import logging
 import warnings
 import pandas as pd
@@ -20,14 +21,17 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-API = os.path.join(ROOT, "api.txt")
+API = os.path.join(MAIN, "api.txt")
 
-from etrade.market import ETradeSettlementDownloader, ETradeStockDownloader, ETradeOptionDownloader
-from finance.variables import Querys, Variables, Files
+from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
+from finance.variables import Querys, Files
 from webscraping.webreaders import WebAuthorizer, WebReader
+from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
 from support.queues import Dequeuer, Requeuer, Queue
 from support.variables import DateRange
+from support.filters import Filter
+from support.files import Saver
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -41,11 +45,16 @@ request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
+
 class SymbolDequeuer(Dequeuer, Producer, parser=Querys.Symbol): pass
 class StockDownloader(ETradeStockDownloader, Processor): pass
-class SettlementRequeuer(Requeuer, Consumer):
-    @staticmethod
-    def parse(series): pass
+class StockRequeuer(Requeuer, Consumer, parser=pd.Series.to_dict): pass
+
+class TradeDequeuer(Dequeuer, Producer, parser=Querys.Trade): pass
+class ProductDownloader(ETradeProductDownloader, Processor): pass
+class OptionDownloader(ETradeOptionDownloader, Processor): pass
+class OptionFilter(Filter, Processor, query=Querys.Settlement): pass
+class OptionSaver(Saver, Consumer, query=Querys.Settlement): pass
 
 class MarketFile(Files.Options.Trade + Files.Options.Quote): pass
 class MarketAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
@@ -53,12 +62,33 @@ class MarketReader(WebReader, delay=10): pass
 
 
 def main(*args, api={}, tickers=[], expires=[], **kwargs):
-    security_authorizer = MarketAuthorizer(name="MarketAuthorizer", apikey=api["key"], apicode=api["code"])
-    market_queue = Queue.FIFO(name="MarketQueue", contents=tickers, capacity=None, timeout=None)
+    security_authorizer = MarketAuthorizer(name="MarketAuthorizer", **api)
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=tickers, capacity=None, timeout=None)
+    trade_queue = Queue.FIFO(name="TradeQueue", contents=[], capacity=None, timeout=None)
     market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
 
     with MarketReader(name="MarketReader", authorizer=security_authorizer) as source:
-        symbol_dequeue = SymbolDequeuer(name="SymbolsDequeuer", queue=market_queue)
+        symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", queue=symbol_queue)
+        stock_downloader = StockDownloader(name="StockDownloader", source=source)
+        stock_requeuer = StockRequeuer(name="StockRequeuer", queue=trade_queue)
+        stock_pipeline = symbol_dequeuer + stock_downloader + stock_requeuer
+        stock_thread = RoutineThread(stock_pipeline).setup()
+
+        trade_dequeuer = TradeDequeuer(name="TradeDequeuer", queue=trade_queue)
+        product_downloader = ProductDownloader(name="ProductDownloader", source=source)
+        option_downloader = OptionDownloader(name="OptionDownloader", source=source)
+        option_saver = OptionSaver(name="OptionSaver", file=market_file, mode="w")
+        option_pipeline = trade_dequeuer + product_downloader + option_downloader + option_saver
+        option_thread = RepeatingThread(option_pipeline).setup(expires=expires)
+
+        stock_thread.start()
+        option_thread.start()
+        while bool(stock_thread) or bool(symbol_queue) or bool(trade_queue):
+            time.sleep(10)
+        stock_thread.cease()
+        option_thread.cease()
+        stock_thread.join()
+        option_thread.join()
 
 
 if __name__ == "__main__":

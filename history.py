@@ -54,12 +54,11 @@ def main(*args, tickers=[], dates=[], period, **kwargs):
     history_technicals = [Variables.Analysis.Technical.STATISTIC, Variables.Analysis.Technical.STOCHASTIC]
 
     with HistoryDriver(name="HistoryDriver") as history_source:
-        history_dequeue = SymbolDequeuer(name="HistoryDequeue", queue=history_queue)
+        history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", queue=history_queue)
         history_downloader = BarsDownloader(name="HistoryDownloader", source=history_source)
         history_calculator = TechnicalCalculator(name="HistoryCalculator", technicals=history_technicals)
         history_saver = TechnicalSaver(name="HistorySaver", file=history_file, mode="w")
-
-        history_pipeline = history_dequeue + history_downloader + history_calculator + history_saver
+        history_pipeline = history_dequeuer + history_downloader + history_calculator + history_saver
         history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(dates=dates, period=period)
         history_thread.start()
         history_thread.join()
