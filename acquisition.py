@@ -25,10 +25,10 @@ from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Files, Strategies
 from support.pipelines import Routine, Producer, Processor, Consumer
+from support.filters import Filter, Criterion
 from support.synchronize import RoutineThread
 from support.files import Directory, Loader
 from support.transforms import Pivoter
-from support.filters import Filter
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -54,20 +54,27 @@ class ProspectReader(ProspectReader, Producer, query=Querys.Settlement): pass
 class AcquisitionFile(Files.Options.Trade + Files.Options.Quote):
     pass
 
+class SecurityCriterion(Criterion):
+    size = lambda table, size: table["size"] >= size
+
+class ValuationCriterion(Criterion):
+    apy = lambda table, apy: table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= apy
+    cost = lambda table, cost: (table[("cost", Variables.Valuations.Scenario.MINIMUM)] > 0) & (table[("cost", Variables.Valuations.Scenario.MINIMUM)] <= cost)
+    size = lambda table, size: table[("size", "")] >= size
+
 
 def main(*args, criterion={}, discount, fees, **kwargs):
-    valuation_criterion = lambda table: (table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= criterion["apy"]) & (table[("size", "")] >= criterion["size"])
-    security_criterion = lambda table: table["size"] >= criterion["size"]
-    acquisition_priority = lambda columns: columns[("apy", Variables.Valuations.Scenario.MINIMUM)]
-
     acquisition_file = AcquisitionFile(name="AcquisitionFile", folder="market", repository=REPOSITORY)
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.Valuation.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
+    acquisition_priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
+    security_criterion = SecurityCriterion(**criterion)
+    valuation_criterion = ValuationCriterion(**criterion)
 
     option_directory = OptionDirectory(name="OptionDirectory", file=acquisition_file, mode="r")
     option_loader = OptionLoader(name="OptionLoader", file=acquisition_file, mode="r")
-    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.MARKET)
+    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
     security_filter = SecurityFilter(name="SecurityFilter", criterion=security_criterion)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
@@ -93,7 +100,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    sysCriterion = dict(apy=0.05, size=10)
+    sysCriterion = dict(apy=1.00, cost=1000, size=10)
     main(criterion=sysCriterion, discount=0.00, fees=0.00)
 
 
