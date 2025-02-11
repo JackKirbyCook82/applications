@@ -72,7 +72,7 @@ def main(*args, api={}, tickers=[], expires=[], **kwargs):
         stock_downloader = StockDownloader(name="StockDownloader", source=source)
         stock_requeuer = StockRequeuer(name="StockRequeuer", queue=trade_queue)
         stock_pipeline = symbol_dequeuer + stock_downloader + stock_requeuer
-        stock_thread = RoutineThread(stock_pipeline).setup()
+        stock_thread = RoutineThread(stock_pipeline)
 
         trade_dequeuer = TradeDequeuer(name="TradeDequeuer", queue=trade_queue)
         product_downloader = ProductDownloader(name="ProductDownloader", source=source)

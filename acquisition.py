@@ -12,22 +12,24 @@ import time
 import logging
 import warnings
 import pandas as pd
+from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 REPOSITORY = os.path.join(ROOT, "repository")
 if ROOT not in sys.path: sys.path.append(ROOT)
 
-from finance.prospects import ProspectCalculator, ProspectWriter, ProspectDiscarding, ProspectReader
+from finance.prospects import ProspectCalculator, ProspectRoutine, ProspectWriter, ProspectReader
 from finance.prospects import ProspectTable, ProspectHeader, ProspectLayout
+from finance.holdings import HoldingsCalculator
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Files, Strategies
 from support.pipelines import Routine, Producer, Processor, Consumer
+from support.synchronize import RoutineThread, RepeatingThread
+from support.files import Directory, Loader, Saver
 from support.filters import Filter, Criterion
-from support.synchronize import RoutineThread
-from support.files import Directory, Loader
 from support.transforms import Pivoter
 
 __version__ = "1.0.0"
@@ -48,23 +50,43 @@ class ValuationPivoter(Pivoter, Processor, query=Querys.Settlement): pass
 class ValuationFilter(Filter, Processor, query=Querys.Settlement): pass
 class ProspectCalculator(ProspectCalculator, Processor): pass
 class ProspectWriter(ProspectWriter, Consumer, query=Querys.Settlement): pass
-class ProspectRemover(ProspectDiscarding, Routine, query=Querys.Settlement): pass
+class ProspectRoutine(ProspectRoutine, Routine, query=Querys.Settlement): pass
 class ProspectReader(ProspectReader, Producer, query=Querys.Settlement): pass
+class HoldingsCalculator(HoldingsCalculator, Processor): pass
+class HoldingsSaver(Saver, Consumer, query=Querys.Settlement): pass
 
-class AcquisitionFile(Files.Options.Trade + Files.Options.Quote):
-    pass
+class MarketFile(Files.Options.Trade + Files.Options.Quote): pass
+class HoldingsFile(Files.Options.Holdings): pass
 
-class SecurityCriterion(Criterion):
-    size = lambda table, size: table["size"] >= size
+class SecurityCriterion(Criterion, fields=["size"]):
+    def execute(self, table): return self.size(table)
+    def size(self, table): return table["size"] >= self["size"]
 
-class ValuationCriterion(Criterion):
-    apy = lambda table, apy: table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= apy
-    cost = lambda table, cost: (table[("cost", Variables.Valuations.Scenario.MINIMUM)] > 0) & (table[("cost", Variables.Valuations.Scenario.MINIMUM)] <= cost)
-    size = lambda table, size: table[("size", "")] >= size
+class ValuationCriterion(Criterion, fields=["apy", "cost", "size"]):
+    def execute(self, table): return self.apy(table) & self.cost(table) & self.size(table)
+    def apy(self, table): return table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= self["apy"]
+    def cost(self, table): return (table[("cost", Variables.Valuations.Scenario.MINIMUM)] > 0) & (table[("cost", Variables.Valuations.Scenario.MINIMUM)] <= self["cost"])
+    def size(self, table): return table[("size", "")] >= self["size"]
+
+class AcquisitionProtocol(ntuple("Protocol", "current tenure capacity discount liquidity")):
+    def limited(self, mask): return (mask.cumsum() < self.capacity + 1) & mask
+    def timeout(self, table): return (pd.to_datetime(self.current) - table["current"]) >= self.tenure
+    def obsolete(self, table): return (table["status"] == Variables.Status.PROSPECT) & self.timeout(table)
+    def unattractive(self, table): return table["priority"] < self.discount
+    def attractive(self, table): return table["priority"] >= self.discount
+    def illiquid(self, table): return table["size"] < self.liquidity
+    def liquid(self, table): return table["size"] >= self.liquidity
+
+    def obsolete(self, table): return (table["status"] == Variables.Status.PROSPECT) & self.timeout(table)
+    def abandon(self, table): return self.limited((table["status"] == Variables.Status.PROSPECT) & self.unattractive(table))
+    def pursue(self, table): return self.limited((table["status"] == Variables.Status.PROSPECT) & self.attractive(table))
+    def reject(self, table): return self.limited((table["status"] == Variables.Status.PENDING) & self.illiquid(table))
+    def accept(self, table): return self.limited((table["status"] == Variables.Status.PENDING) & self.liquid(table))
 
 
 def main(*args, criterion={}, discount, fees, **kwargs):
-    acquisition_file = AcquisitionFile(name="AcquisitionFile", folder="market", repository=REPOSITORY)
+    market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
+    holdings_file = HoldingsFile(name="HoldingsFile", folder="holdings", repository=REPOSITORY)
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.Valuation.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
@@ -72,8 +94,8 @@ def main(*args, criterion={}, discount, fees, **kwargs):
     security_criterion = SecurityCriterion(**criterion)
     valuation_criterion = ValuationCriterion(**criterion)
 
-    option_directory = OptionDirectory(name="OptionDirectory", file=acquisition_file, mode="r")
-    option_loader = OptionLoader(name="OptionLoader", file=acquisition_file, mode="r")
+    option_directory = OptionDirectory(name="OptionDirectory", file=market_file, mode="r")
+    option_loader = OptionLoader(name="OptionLoader", file=market_file, mode="r")
     security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
     security_filter = SecurityFilter(name="SecurityFilter", criterion=security_criterion)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
@@ -82,16 +104,25 @@ def main(*args, criterion={}, discount, fees, **kwargs):
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=valuation_criterion)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=acquisition_header, priority=acquisition_priority)
     prospect_writer = ProspectWriter(name="ProspectWriter", table=acquisition_table)
-    acquisition_pipeline = option_directory + option_loader + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_pivoter + valuation_filter + prospect_calculator + prospect_writer
-    acquisition_thread = RoutineThread(acquisition_pipeline, name="AcquisitionThread").setup(discount=discount, fees=fees)
+    market_pipeline = option_directory + option_loader + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_pivoter + valuation_filter + prospect_calculator + prospect_writer
+    market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(discount=discount, fees=fees)
 
-    acquisition_thread.start()
-    while bool(acquisition_thread):
+    rejected_reader = ProspectReader(name="RejectedReader", table=acquisition_table, status=[Variables.Markets.Status.OBSOLETE, Variables.Markets.Status.ABANDONED, Variables.Markets.Status.REJECTED])
+    protocol_routine = ProspectRoutine(name="ProtocolRoutine", table=acquisition_table)
+    accepted_reader = ProspectReader(name="AcceptedReader", table=acquisition_table, status=Variables.Markets.Status.ACCEPTED)
+    holdings_calculator = HoldingsCalculator(name="HoldingsCalculator")
+    holdings_saver = HoldingsSaver(name="HoldingsSaver", file=holdings_file, mode="a")
+    accepted_pipeline = accepted_reader + holdings_calculator + holdings_saver
+    rejected_thread = RepeatingThread(rejected_reader, name="RejectedThread", wait=10)
+    protocol_thread = RepeatingThread(protocol_routine, name="ProtocolThread", wait=10)
+    accepted_thread = RepeatingThread(accepted_pipeline, name="AcceptedThread", wait=10)
+
+    market_thread.start()
+    while bool(market_thread) or bool(acquisition_table):
         print(acquisition_table)
         time.sleep(10)
-    acquisition_thread.cease()
-    acquisition_thread.join()
-    print(acquisition_table)
+    market_thread.cease()
+    market_thread.join()
 
 
 if __name__ == "__main__":
