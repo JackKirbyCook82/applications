@@ -12,7 +12,6 @@ import time
 import logging
 import warnings
 import pandas as pd
-from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -30,7 +29,9 @@ from support.pipelines import Routine, Producer, Processor, Consumer
 from support.synchronize import RoutineThread, RepeatingThread
 from support.files import Directory, Loader, Saver
 from support.filters import Filter, Criterion
+from support.decorators import Decorator
 from support.transforms import Pivoter
+from support.mixins import Naming
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -68,31 +69,34 @@ class ValuationCriterion(Criterion, fields=["apy", "cost", "size"]):
     def cost(self, table): return (table[("cost", Variables.Valuations.Scenario.MINIMUM)] > 0) & (table[("cost", Variables.Valuations.Scenario.MINIMUM)] <= self["cost"])
     def size(self, table): return table[("size", "")] >= self["size"]
 
-class AcquisitionProtocol(ntuple("Protocol", "current tenure capacity discount liquidity")):
-    def limited(self, mask): return (mask.cumsum() < self.capacity + 1) & mask
-    def timeout(self, table): return (pd.to_datetime(self.current) - table["current"]) >= self.tenure
+class AcquisitionProtocol(Naming, fields=["capacity", "discount", "liquidity"]):
+    def limited(self, mask): return (mask.cumsum() < self["capacity"] + 1) & mask
     def obsolete(self, table): return (table["status"] == Variables.Status.PROSPECT) & self.timeout(table)
-    def unattractive(self, table): return table["priority"] < self.discount
-    def attractive(self, table): return table["priority"] >= self.discount
-    def illiquid(self, table): return table["size"] < self.liquidity
-    def liquid(self, table): return table["size"] >= self.liquidity
+    def unattractive(self, table): return table["priority"] < self["discount"]
+    def attractive(self, table): return table["priority"] >= self["discount"]
+    def illiquid(self, table): return table["size"] < self["liquidity"]
+    def liquid(self, table): return table["size"] >= self["liquidity"]
 
-    def obsolete(self, table): return (table["status"] == Variables.Status.PROSPECT) & self.timeout(table)
-    def abandon(self, table): return self.limited((table["status"] == Variables.Status.PROSPECT) & self.unattractive(table))
-    def pursue(self, table): return self.limited((table["status"] == Variables.Status.PROSPECT) & self.attractive(table))
-    def reject(self, table): return self.limited((table["status"] == Variables.Status.PENDING) & self.illiquid(table))
-    def accept(self, table): return self.limited((table["status"] == Variables.Status.PENDING) & self.liquid(table))
+    @Decorator(status=Variables.Markets.Status.ABANDONED)
+    def abandon(self, table): return self.limited((table["status"] == Variables.Markets.Status.PROSPECT) & self.unattractive(table))
+    @Decorator(status=Variables.Markets.Status.PENDING)
+    def pursue(self, table): return self.limited((table["status"] == Variables.Markets.Status.PROSPECT) & self.attractive(table))
+    @Decorator(status=Variables.Markets.Status.REJECTED)
+    def reject(self, table): return self.limited((table["status"] == Variables.Markets.Status.PENDING) & self.illiquid(table))
+    @Decorator(status=Variables.Markets.Status.ACCEPTED)
+    def accept(self, table): return self.limited((table["status"] == Variables.Markets.Status.PENDING) & self.liquid(table))
 
 
-def main(*args, criterion={}, discount, fees, **kwargs):
+def main(*args, criterion={}, protocol={}, discount, fees, **kwargs):
     market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
     holdings_file = HoldingsFile(name="HoldingsFile", folder="holdings", repository=REPOSITORY)
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.Valuation.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
     acquisition_priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
-    security_criterion = SecurityCriterion(**criterion)
+    acquisition_protocol = AcquisitionProtocol(**protocol)
     valuation_criterion = ValuationCriterion(**criterion)
+    security_criterion = SecurityCriterion(**criterion)
 
     option_directory = OptionDirectory(name="OptionDirectory", file=market_file, mode="r")
     option_loader = OptionLoader(name="OptionLoader", file=market_file, mode="r")
@@ -108,21 +112,25 @@ def main(*args, criterion={}, discount, fees, **kwargs):
     market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(discount=discount, fees=fees)
 
     rejected_reader = ProspectReader(name="RejectedReader", table=acquisition_table, status=[Variables.Markets.Status.OBSOLETE, Variables.Markets.Status.ABANDONED, Variables.Markets.Status.REJECTED])
-    protocol_routine = ProspectRoutine(name="ProtocolRoutine", table=acquisition_table)
+    protocol_routine = ProspectRoutine(name="ProtocolRoutine", table=acquisition_table, protocol=acquisition_protocol)
     accepted_reader = ProspectReader(name="AcceptedReader", table=acquisition_table, status=Variables.Markets.Status.ACCEPTED)
     holdings_calculator = HoldingsCalculator(name="HoldingsCalculator")
     holdings_saver = HoldingsSaver(name="HoldingsSaver", file=holdings_file, mode="a")
-    accepted_pipeline = accepted_reader + holdings_calculator + holdings_saver
     rejected_thread = RepeatingThread(rejected_reader, name="RejectedThread", wait=10)
     protocol_thread = RepeatingThread(protocol_routine, name="ProtocolThread", wait=10)
-    accepted_thread = RepeatingThread(accepted_pipeline, name="AcceptedThread", wait=10)
 
     market_thread.start()
+    protocol_thread.start()
+    rejected_thread.start()
     while bool(market_thread) or bool(acquisition_table):
         print(acquisition_table)
         time.sleep(10)
     market_thread.cease()
+    protocol_thread.cease()
+    rejected_thread.cease()
     market_thread.join()
+    protocol_thread.join()
+    rejected_thread.join()
 
 
 if __name__ == "__main__":
@@ -131,7 +139,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    sysCriterion = dict(apy=1.00, cost=1000, size=10)
-    main(criterion=sysCriterion, discount=0.00, fees=0.00)
+    sysProtocol = dict(capacity=100, liquidity=25, discount=3.50)
+    sysCriterion = dict(apy=1.50, cost=1000, size=10)
+    main(criterion=sysCriterion, protocol=sysProtocol, discount=0.00, fees=0.00)
 
 
