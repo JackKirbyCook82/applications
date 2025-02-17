@@ -89,7 +89,6 @@ class AcquisitionProtocol(Naming, fields=["capacity", "discount", "liquidity"]):
 
 def main(*args, criterion={}, protocol={}, discount, fees, **kwargs):
     market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
-    holdings_file = HoldingsFile(name="HoldingsFile", folder="holdings", repository=REPOSITORY)
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.Valuation.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
@@ -113,9 +112,6 @@ def main(*args, criterion={}, protocol={}, discount, fees, **kwargs):
 
     rejected_reader = ProspectReader(name="RejectedReader", table=acquisition_table, status=[Variables.Markets.Status.OBSOLETE, Variables.Markets.Status.ABANDONED, Variables.Markets.Status.REJECTED])
     protocol_routine = ProspectRoutine(name="ProtocolRoutine", table=acquisition_table, protocol=acquisition_protocol)
-    accepted_reader = ProspectReader(name="AcceptedReader", table=acquisition_table, status=Variables.Markets.Status.ACCEPTED)
-    holdings_calculator = HoldingsCalculator(name="HoldingsCalculator")
-    holdings_saver = HoldingsSaver(name="HoldingsSaver", file=holdings_file, mode="a")
     rejected_thread = RepeatingThread(rejected_reader, name="RejectedThread", wait=10)
     protocol_thread = RepeatingThread(protocol_routine, name="ProtocolThread", wait=10)
 

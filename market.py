@@ -9,6 +9,7 @@ Created on Fri Jan 1 2025
 import os
 import sys
 import time
+import json
 import logging
 import warnings
 import pandas as pd
@@ -21,11 +22,11 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-API = os.path.join(MAIN, "api.txt")
+API = os.path.join(RESOURCES, "api.txt")
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
 from finance.variables import Querys, Files
-from webscraping.webreaders import WebAuthorizer, WebReader
+from webscraping.webreaders import WebAuthorizer, WebAPI, WebReader
 from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
 from support.queues import Dequeuer, Requeuer, Queue
@@ -61,11 +62,11 @@ class MarketAuthorizer(WebAuthorizer, authorize=authorize, request=request, acce
 class MarketReader(WebReader, delay=10): pass
 
 
-def main(*args, api={}, tickers=[], expires=[], **kwargs):
-    security_authorizer = MarketAuthorizer(name="MarketAuthorizer", **api)
+def main(*args, api, tickers=[], expires=[], **kwargs):
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=tickers, capacity=None, timeout=None)
     trade_queue = Queue.FIFO(name="TradeQueue", contents=[], capacity=None, timeout=None)
     market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
+    security_authorizer = MarketAuthorizer(api=api)
 
     with MarketReader(name="MarketReader", authorizer=security_authorizer) as source:
         symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", queue=symbol_queue)
@@ -100,7 +101,8 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysAPI = pd.read_csv(API, header=0, index_col="website", dtype=str).to_dict("index")["etrade"]
+    with open(API, "r") as apifile:
+        sysAPI = WebAPI(*json.loads(apifile.read())["etrade"])
     main(api=sysAPI, tickers=sysTickers, expires=sysExpires)
 
 
