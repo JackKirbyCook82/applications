@@ -19,13 +19,13 @@ ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
-CHROME = os.path.join(RESOURCES, "chromedriver.exe")
+DRIVER = os.path.join(RESOURCES, "chromedriver.exe")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from yahoo.history import YahooBarsDownloader
 from finance.technicals import TechnicalCalculator
 from finance.variables import Querys, Variables, Files
-from webscraping.webdrivers import WebDriver, WebBrowser
+from webscraping.webdrivers import WebDriver
 from support.pipelines import Producer, Processor, Consumer
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
@@ -44,21 +44,23 @@ class BarsDownloader(YahooBarsDownloader, Processor): pass
 class TechnicalCalculator(TechnicalCalculator, Processor): pass
 class TechnicalSaver(Saver, Consumer, query=Querys.Symbol): pass
 
-class HistoryFile(Files.Stocks.Bars + Files.Stocks.Statistic + Files.Stocks.Stochastic): pass
-class HistoryDriver(WebDriver, browser=WebBrowser.Chrome, executable=CHROME, delay=5): pass
+
+def history(*args, source, file, symbols, **kwargs):
+    history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", queue=symbols)
+    history_downloader = BarsDownloader(name="HistoryDownloader", source=source)
+    history_calculator = TechnicalCalculator(name="HistoryCalculator", technicals=[Variables.Analysis.Technical.STATISTIC, Variables.Analysis.Technical.STOCHASTIC])
+    history_saver = TechnicalSaver(name="HistorySaver", file=file, mode="w")
+    history_pipeline = history_dequeuer + history_downloader + history_calculator + history_saver
+    return history_pipeline
 
 
 def main(*args, tickers=[], dates=[], period, **kwargs):
-    history_queue = Queue.FIFO(name="HistoryQueue", contents=tickers, capacity=None, timeout=None)
-    history_file = HistoryFile(name="HistoryFile", folder="history", repository=REPOSITORY)
-    history_technicals = [Variables.Analysis.Technical.STATISTIC, Variables.Analysis.Technical.STOCHASTIC]
+    history_file = (Files.Stocks.Bars + Files.Stocks.Statistic + Files.Stocks.Stochastic)(name="HistoryFile", folder="history", repository=REPOSITORY)
+    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=tickers, capacity=None, timeout=None)
 
-    with HistoryDriver(name="HistoryDriver") as history_source:
-        history_dequeuer = SymbolDequeuer(name="HistoryDequeuer", queue=history_queue)
-        history_downloader = BarsDownloader(name="HistoryDownloader", source=history_source)
-        history_calculator = TechnicalCalculator(name="HistoryCalculator", technicals=history_technicals)
-        history_saver = TechnicalSaver(name="HistorySaver", file=history_file, mode="w")
-        history_pipeline = history_dequeuer + history_downloader + history_calculator + history_saver
+    with WebDriver(executable=DRIVER, delay=5) as source:
+        history_parameters = dict(source=source, file=history_file, symbols=symbol_queue)
+        history_pipeline = history(*args, **history_parameters, **kwargs)
         history_thread = RoutineThread(history_pipeline, name="HistoryThread").setup(dates=dates, period=period)
         history_thread.start()
         history_thread.join()

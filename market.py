@@ -26,7 +26,7 @@ API = os.path.join(RESOURCES, "api.txt")
 
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
 from finance.variables import Querys, Files
-from webscraping.webreaders import WebAuthorizer, WebAPI, WebReader
+from webscraping.webreaders import WebAuthorizer, WebAuthorizerAPI, WebReader
 from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
 from support.queues import Dequeuer, Requeuer, Queue
@@ -57,34 +57,40 @@ class OptionDownloader(ETradeOptionDownloader, Processor): pass
 class OptionFilter(Filter, Processor, query=Querys.Settlement): pass
 class OptionSaver(Saver, Consumer, query=Querys.Settlement): pass
 
-class MarketFile(Files.Options.Trade + Files.Options.Quote): pass
-class MarketAuthorizer(WebAuthorizer, authorize=authorize, request=request, access=access, base=base): pass
-class MarketReader(WebReader, delay=10): pass
+
+def stocks(*args, source, symbols, securities, **kwargs):
+    symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", queue=symbols)
+    stock_downloader = StockDownloader(name="StockDownloader", source=source)
+    stock_requeuer = StockRequeuer(name="StockRequeuer", queue=securities)
+    stock_pipeline = symbol_dequeuer + stock_downloader + stock_requeuer
+    return stock_pipeline
+
+def options(*args, source, file, securities, **kwargs):
+    security_dequeuer = TradeDequeuer(name="SecurityDequeuer", queue=securities)
+    product_downloader = ProductDownloader(name="ProductDownloader", source=source)
+    option_downloader = OptionDownloader(name="OptionDownloader", source=source)
+    option_saver = OptionSaver(name="OptionSaver", file=file, mode="w")
+    option_pipeline = security_dequeuer + product_downloader + option_downloader + option_saver
+    return option_pipeline
 
 
 def main(*args, api, tickers=[], expires=[], **kwargs):
+    market_file = (Files.Options.Trade + Files.Options.Quote)(name="MarketFile", folder="market", repository=REPOSITORY)
     symbol_queue = Queue.FIFO(name="SymbolQueue", contents=tickers, capacity=None, timeout=None)
-    trade_queue = Queue.FIFO(name="TradeQueue", contents=[], capacity=None, timeout=None)
-    market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
-    security_authorizer = MarketAuthorizer(api=api)
+    security_queue = Queue.FIFO(name="SecurityQueue", contents=[], capacity=None, timeout=None)
 
-    with MarketReader(name="MarketReader", authorizer=security_authorizer) as source:
-        symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", queue=symbol_queue)
-        stock_downloader = StockDownloader(name="StockDownloader", source=source)
-        stock_requeuer = StockRequeuer(name="StockRequeuer", queue=trade_queue)
-        stock_pipeline = symbol_dequeuer + stock_downloader + stock_requeuer
+    market_authorizer = WebAuthorizer(api=api, authorize=authorize, request=request, access=access, base=base)
+    with WebReader(authorizer=market_authorizer, delay=10) as source:
+        stock_parameters = dict(source=source, symbols=symbol_queue)
+        stock_pipeline = stocks(*args, **stock_parameters, **kwargs)
         stock_thread = RoutineThread(stock_pipeline)
-
-        trade_dequeuer = TradeDequeuer(name="TradeDequeuer", queue=trade_queue)
-        product_downloader = ProductDownloader(name="ProductDownloader", source=source)
-        option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-        option_saver = OptionSaver(name="OptionSaver", file=market_file, mode="w")
-        option_pipeline = trade_dequeuer + product_downloader + option_downloader + option_saver
+        option_parameters = dict(source=source, file=market_file, securities=security_queue)
+        option_pipeline = options(*args, **option_parameters, **kwargs)
         option_thread = RepeatingThread(option_pipeline).setup(expires=expires)
 
         stock_thread.start()
         option_thread.start()
-        while bool(stock_thread) or bool(symbol_queue) or bool(trade_queue):
+        while bool(stock_thread) or bool(symbol_queue) or bool(security_queue):
             time.sleep(10)
         stock_thread.cease()
         option_thread.cease()
@@ -102,7 +108,7 @@ if __name__ == "__main__":
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
-        sysAPI = WebAPI(*json.loads(apifile.read())["etrade"])
+        sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["etrade"])
     main(api=sysAPI, tickers=sysTickers, expires=sysExpires)
 
 

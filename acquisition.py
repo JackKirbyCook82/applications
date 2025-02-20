@@ -12,6 +12,7 @@ import time
 import logging
 import warnings
 import pandas as pd
+from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -56,9 +57,8 @@ class ProspectReader(ProspectReader, Producer, query=Querys.Settlement): pass
 class HoldingsCalculator(HoldingsCalculator, Processor): pass
 class HoldingsSaver(Saver, Consumer, query=Querys.Settlement): pass
 
-class MarketFile(Files.Options.Trade + Files.Options.Quote): pass
-class HoldingsFile(Files.Options.Holdings): pass
 
+class AcquisitionCriterion(ntuple("Criterion", "security valuation")): pass
 class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
@@ -87,46 +87,51 @@ class AcquisitionProtocol(Naming, fields=["capacity", "discount", "liquidity"]):
     def accept(self, table): return self.limited((table["status"] == Variables.Markets.Status.PENDING) & self.liquid(table))
 
 
+def acquisition(*args, file, table, header, priority, criterion, **kwargs):
+    option_directory = OptionDirectory(name="OptionDirectory", file=file, mode="r")
+    option_loader = OptionLoader(name="OptionLoader", file=file, mode="r")
+    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
+    security_filter = SecurityFilter(name="SecurityFilter", criterion=criterion.security)
+    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
+    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=header)
+    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterion.valuation)
+    prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=header, priority=priority)
+    prospect_writer = ProspectWriter(name="ProspectWriter", table=table)
+    acquisition_pipeline = option_directory + option_loader + security_calculator + security_filter + strategy_calculator
+    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_pivoter + valuation_filter + prospect_calculator + prospect_writer
+    return acquisition_pipeline
+
+
 def main(*args, criterion={}, protocol={}, discount, fees, **kwargs):
-    market_file = MarketFile(name="MarketFile", folder="market", repository=REPOSITORY)
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.Valuation.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
+    market_file = (Files.Options.Trade + Files.Options.Quote)(name="MarketFile", folder="market", repository=REPOSITORY)
     acquisition_priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
+    acquisition_criterion = AcquisitionCriterion(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
     acquisition_protocol = AcquisitionProtocol(**protocol)
-    valuation_criterion = ValuationCriterion(**criterion)
-    security_criterion = SecurityCriterion(**criterion)
 
-    option_directory = OptionDirectory(name="OptionDirectory", file=market_file, mode="r")
-    option_loader = OptionLoader(name="OptionLoader", file=market_file, mode="r")
-    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
-    security_filter = SecurityFilter(name="SecurityFilter", criterion=security_criterion)
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
-    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=acquisition_header)
-    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=valuation_criterion)
-    prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=acquisition_header, priority=acquisition_priority)
-    prospect_writer = ProspectWriter(name="ProspectWriter", table=acquisition_table)
-    market_pipeline = option_directory + option_loader + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_pivoter + valuation_filter + prospect_calculator + prospect_writer
-    market_thread = RoutineThread(market_pipeline, name="MarketThread").setup(discount=discount, fees=fees)
+    acquisition_parameters = dict(file=market_file, table=acquisition_table, header=acquisition_header, criterion=acquisition_criterion, priority=acquisition_priority)
+    acquisition_pipeline = acquisition(*args, **acquisition_parameters, **kwargs)
+    acquisition_thread = RoutineThread(acquisition_pipeline, name="MarketThread").setup(discount=discount, fees=fees)
+    failure_reader = ProspectReader(name="FailureReader", table=acquisition_table, status=[Variables.Markets.Status.OBSOLETE, Variables.Markets.Status.ABANDONED, Variables.Markets.Status.REJECTED])
+    failure_thread = RepeatingThread(failure_reader, name="FailureThread", wait=10)
+    success_routine = ProspectRoutine(name="SuccessRoutine", table=acquisition_table, protocol=acquisition_protocol)
+    success_thread = RepeatingThread(success_routine, name="SuccessThread", wait=10)
 
-    rejected_reader = ProspectReader(name="RejectedReader", table=acquisition_table, status=[Variables.Markets.Status.OBSOLETE, Variables.Markets.Status.ABANDONED, Variables.Markets.Status.REJECTED])
-    protocol_routine = ProspectRoutine(name="ProtocolRoutine", table=acquisition_table, protocol=acquisition_protocol)
-    rejected_thread = RepeatingThread(rejected_reader, name="RejectedThread", wait=10)
-    protocol_thread = RepeatingThread(protocol_routine, name="ProtocolThread", wait=10)
-
-    market_thread.start()
-    protocol_thread.start()
-    rejected_thread.start()
-    while bool(market_thread) or bool(acquisition_table):
+    acquisition_thread.start()
+    success_thread.start()
+    failure_thread.start()
+    while bool(acquisition_thread) or bool(acquisition_table):
         print(acquisition_table)
         time.sleep(10)
-    market_thread.cease()
-    protocol_thread.cease()
-    rejected_thread.cease()
-    market_thread.join()
-    protocol_thread.join()
-    rejected_thread.join()
+    acquisition_thread.cease()
+    success_thread.cease()
+    failure_thread.cease()
+    acquisition_thread.join()
+    success_thread.join()
+    failure_thread.join()
 
 
 if __name__ == "__main__":
