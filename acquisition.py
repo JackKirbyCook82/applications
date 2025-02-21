@@ -21,14 +21,13 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 
 from finance.prospects import ProspectCalculator, ProspectRoutine, ProspectWriter, ProspectReader
 from finance.prospects import ProspectTable, ProspectHeader, ProspectLayout
-from finance.holdings import HoldingsCalculator
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Files, Strategies
 from support.pipelines import Routine, Producer, Processor, Consumer
 from support.synchronize import RoutineThread, RepeatingThread
-from support.files import Directory, Loader, Saver
+from support.files import Directory, Loader
 from support.filters import Filter, Criterion
 from support.decorators import Decorator
 from support.transforms import Pivoter
@@ -54,11 +53,10 @@ class ProspectCalculator(ProspectCalculator, Processor): pass
 class ProspectWriter(ProspectWriter, Consumer, query=Querys.Settlement): pass
 class ProspectRoutine(ProspectRoutine, Routine, query=Querys.Settlement): pass
 class ProspectReader(ProspectReader, Producer, query=Querys.Settlement): pass
-class HoldingsCalculator(HoldingsCalculator, Processor): pass
-class HoldingsSaver(Saver, Consumer, query=Querys.Settlement): pass
 
+class Criterions(ntuple("Criterion", "security valuation")): pass
+class Queues(ntuple("Queues", "trade")): pass
 
-class AcquisitionCriterion(ntuple("Criterion", "security valuation")): pass
 class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
@@ -87,15 +85,15 @@ class AcquisitionProtocol(Naming, fields=["capacity", "discount", "liquidity"]):
     def accept(self, table): return self.limited((table["status"] == Variables.Markets.Status.PENDING) & self.liquid(table))
 
 
-def acquisition(*args, file, table, header, priority, criterion, **kwargs):
-    option_directory = OptionDirectory(name="OptionDirectory", file=file, mode="r")
-    option_loader = OptionLoader(name="OptionLoader", file=file, mode="r")
+def acquisition(*args, table, header, priority, criterions, files, **kwargs):
+    option_directory = OptionDirectory(name="OptionDirectory", file=files.option, mode="r")
+    option_loader = OptionLoader(name="OptionLoader", file=files.option, mode="r")
     security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
-    security_filter = SecurityFilter(name="SecurityFilter", criterion=criterion.security)
+    security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=header)
-    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterion.valuation)
+    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=header, priority=priority)
     prospect_writer = ProspectWriter(name="ProspectWriter", table=table)
     acquisition_pipeline = option_directory + option_loader + security_calculator + security_filter + strategy_calculator
@@ -107,12 +105,15 @@ def main(*args, criterion={}, protocol={}, discount, fees, **kwargs):
     acquisition_layout = ProspectLayout(name="AcquisitionLayout", valuation=Variables.Valuations.Valuation.ARBITRAGE, rows=100)
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_table = ProspectTable(name="AcquisitionTable", layout=acquisition_layout, header=acquisition_header)
-    market_file = (Files.Options.Trade + Files.Options.Quote)(name="MarketFile", folder="market", repository=REPOSITORY)
     acquisition_priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
-    acquisition_criterion = AcquisitionCriterion(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
     acquisition_protocol = AcquisitionProtocol(**protocol)
+    option_file = (Files.Options.Trade + Files.Options.Quote)(name="OptionFile", folder="option", repository=REPOSITORY)
+    security_criterion = SecurityCriterion(**criterion)
+    valuation_criterion = ValuationCriterion(**criterion)
+    criterions = Criterions(security_criterion, valuation_criterion)
+    files = Files(option_file)
 
-    acquisition_parameters = dict(file=market_file, table=acquisition_table, header=acquisition_header, criterion=acquisition_criterion, priority=acquisition_priority)
+    acquisition_parameters = dict(table=acquisition_table, header=acquisition_header, priority=acquisition_priority, criterions=criterions, files=files)
     acquisition_pipeline = acquisition(*args, **acquisition_parameters, **kwargs)
     acquisition_thread = RoutineThread(acquisition_pipeline, name="MarketThread").setup(discount=discount, fees=fees)
     failure_reader = ProspectReader(name="FailureReader", table=acquisition_table, status=[Variables.Markets.Status.OBSOLETE, Variables.Markets.Status.ABANDONED, Variables.Markets.Status.REJECTED])

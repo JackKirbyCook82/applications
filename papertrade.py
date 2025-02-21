@@ -8,6 +8,7 @@ Created on Sat Feb 15 2025
 
 import os
 import sys
+import time
 import json
 import logging
 import warnings
@@ -25,16 +26,17 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 API = os.path.join(RESOURCES, "api.txt")
 
 from alpaca.market import AlpacaContractDownloader, AlpacaStockDownloader, AlpacaOptionDownloader
-from alpaca.orders import AlpacaOrderUploader, AlpacaOrderCalculator
-from finance.prospects import ProspectCalculator, ProspectWriter, ProspectReader, ProspectHeader
+from alpaca.orders import AlpacaOrderUploader
+from finance.prospects import ProspectCalculator, ProspectHeader
+from finance.orders import OrderCalculator
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
+from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
-from support.queues import Dequeuer, Queue
-from support.synchronize import RoutineThread
+from support.queues import Dequeuer, Requeuer, Queue
 from support.filters import Filter, Criterion
 from support.variables import DateRange
 from support.transforms import Pivoter
@@ -46,8 +48,10 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolDequeuer(Dequeuer, Producer, parser=Querys.Symbol): pass
-class StockDownloader(AlpacaStockDownloader, Processor): pass
+class StockDownloader(AlpacaStockDownloader, Producer): pass
+class StockRequeuer(Requeuer, Consumer, parser=pd.Series.to_dict): pass
+
+class TradeDequeuer(Dequeuer, Producer, parser=Querys.Trade): pass
 class ContractDownloader(AlpacaContractDownloader, Processor): pass
 class OptionDownloader(AlpacaOptionDownloader, Processor): pass
 class OptionFilter(Filter, Processor, query=Querys.Settlement): pass
@@ -58,12 +62,12 @@ class ValuationCalculator(ValuationCalculator, Processor): pass
 class ValuationPivoter(Pivoter, Processor, query=Querys.Settlement): pass
 class ValuationFilter(Filter, Processor, query=Querys.Settlement): pass
 class ProspectCalculator(ProspectCalculator, Processor): pass
-class ProspectWriter(ProspectWriter, Consumer, query=Querys.Settlement): pass
-class ProspectReader(ProspectReader, Producer, query=Querys.Settlement): pass
-class OrderCalculator(AlpacaOrderCalculator, Processor): pass
+class OrderCalculator(OrderCalculator, Processor): pass
 class OrderUploader(AlpacaOrderUploader, Consumer): pass
 
-class AcquisitionCriterion(ntuple("Criterion", "security valuation")): pass
+class Criterions(ntuple("Criterion", "security valuation")): pass
+class Queues(ntuple("Queues", "trade")): pass
+
 class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
@@ -75,41 +79,58 @@ class ValuationCriterion(Criterion, fields=["apy", "cost", "size"]):
     def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def acquisition(*args, source, symbols, criterion, header, priority, **kwargs):
-    symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", queue=symbols)
+def stocks(*args, source, queues, **kwargs):
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
+    stock_requeuer = StockRequeuer(name="StockRequeuer", queue=queues.trade)
+    stock_pipeline = stock_downloader + stock_requeuer
+    return stock_pipeline
+
+
+def options(*args, source, header, priority, criterions, queues, **kwargs):
+    trade_dequeuer = TradeDequeuer(name="TradeDequeuer", queue=queues.trade)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
     security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
-    security_filter = SecurityFilter(name="SecurityFilter", criterion=criterion.security)
+    security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=header)
-    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterion.valuation)
+    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=header, priority=priority)
     order_calculator = OrderCalculator(name="OrderCalculator")
     order_uploader = OrderUploader(name="OrderUploader", source=source)
-    acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
+    acquisition_pipeline = trade_dequeuer + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
     acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_pivoter + valuation_filter
     acquisition_pipeline = acquisition_pipeline + prospect_calculator + order_calculator + order_uploader
     return acquisition_pipeline
 
 
-def main(*args, tickers=[], expires=[], criterion={}, api, discount, fees, **kwargs):
-    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=tickers, capacity=None, timeout=None)
+def main(*args, symbols=[], expires=[], criterion={}, api, discount, fees, **kwargs):
     acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    acquisition_criterion = AcquisitionCriterion(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
     acquisition_priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
+    trade_queue = Queue.FIFO(name="TradeQueue", contents=[], capacity=None, timeout=None)
+    security_criterion = SecurityCriterion(**criterion)
+    valuation_criterion = ValuationCriterion(**criterion)
+    criterions = Criterions(security_criterion, valuation_criterion)
+    queues = Queues(trade_queue)
 
     with WebReader(delay=10) as source:
-        acquisition_parameters = dict(source=source, symbols=symbol_queue, header=acquisition_header, criterion=acquisition_criterion, priority=acquisition_priority)
-        acquisition_pipeline = acquisition(*args, **acquisition_parameters, **kwargs)
-        acquisition_thread = RoutineThread(acquisition_pipeline, name="AcquisitionThread").setup(expires=expires, api=api, discount=discount, fees=fees)
+        stock_parameters = dict(source=source, critierions=criterions, queues=queues)
+        stock_pipeline = stocks(*args, **stock_parameters, **kwargs)
+        stock_thread = RoutineThread(stock_pipeline, name="StockThread").setup(symbols, api=api)
+        option_parameters = dict(source=source, header=acquisition_header, priority=acquisition_priority, criterions=criterions, queues=queues)
+        option_pipeline = options(*args, **option_parameters, **kwargs)
+        option_thread = RepeatingThread(option_pipeline, name="OptionThread", wait=5).setup(symbols, expires=expires, api=api, discount=discount, fees=fees)
 
-        acquisition_thread.start()
-        acquisition_thread.cease()
-        acquisition_thread.join()
+        stock_thread.start()
+        option_thread.start()
+        while bool(stock_thread) or bool(trade_queue):
+            time.sleep(10)
+        stock_thread.cease()
+        option_thread.cease()
+        stock_thread.join()
+        option_thread.join()
 
 
 if __name__ == "__main__":
@@ -120,11 +141,12 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
+        sysSymbols = list(map(Querys.Symbol, sysTickers))
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
     sysCriterion = dict(apy=1.50, cost=1000, size=10)
-    main(api=sysAPI, tickers=sysTickers, expires=sysExpires, criterion=sysCriterion, discount=0.00, fees=0.00)
+    main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, discount=0.00, fees=0.00)
 
 
 
