@@ -8,14 +8,12 @@ Created on Fri Jan 1 2025
 
 import os
 import sys
-import time
 import json
 import logging
 import warnings
 import pandas as pd
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
-from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -28,9 +26,8 @@ API = os.path.join(RESOURCES, "api.txt")
 from etrade.market import ETradeProductDownloader, ETradeStockDownloader, ETradeOptionDownloader
 from finance.variables import Querys, Files
 from webscraping.webreaders import WebAuthorizer, WebAuthorizerAPI, WebReader
-from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
-from support.queues import Dequeuer, Requeuer, Queue
+from support.synchronize import RoutineThread
 from support.variables import DateRange
 from support.filters import Filter
 from support.files import Saver
@@ -48,60 +45,32 @@ access = "https://api.etrade.com/oauth/access_token"
 base = "https://api.etrade.com"
 
 
-class SymbolDequeuer(Dequeuer, Producer, parser=Querys.Symbol): pass
-class StockDownloader(ETradeStockDownloader, Processor): pass
-class StockRequeuer(Requeuer, Consumer, parser=pd.Series.to_dict): pass
-
-class TradeDequeuer(Dequeuer, Producer, parser=Querys.Trade): pass
-class ProductDownloader(ETradeProductDownloader, Processor): pass
+class StockDownloader(ETradeStockDownloader, Producer): pass
+class ProductDownloader(ETradeProductDownloader, Producer): pass
 class OptionDownloader(ETradeOptionDownloader, Processor): pass
 class OptionFilter(Filter, Processor, query=Querys.Settlement): pass
 class OptionSaver(Saver, Consumer, query=Querys.Settlement): pass
 
-class Queues(ntuple("Queues", "symbol trade")): pass
-class Files(ntuple("Files", "option")): pass
 
-
-def stocks(*args, source, queues, **kwargs):
-    symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", queue=queues.symbol)
-    stock_downloader = StockDownloader(name="StockDownloader", source=source)
-    stock_requeuer = StockRequeuer(name="StockRequeuer", queue=queues.trade)
-    stock_pipeline = symbol_dequeuer + stock_downloader + stock_requeuer
-    return stock_pipeline
-
-def options(*args, source, files, queues, **kwargs):
-    trade_dequeuer = TradeDequeuer(name="TradeDequeuer", queue=queues.trade)
+def market(*args, source, destination, **kwargs):
     product_downloader = ProductDownloader(name="ProductDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-    option_saver = OptionSaver(name="OptionSaver", file=files.options, mode="w")
-    option_pipeline = trade_dequeuer + product_downloader + option_downloader + option_saver
-    return option_pipeline
+    option_saver = OptionSaver(name="OptionSaver", file=destination, mode="w")
+    market_pipeline = product_downloader + option_downloader + option_saver
+    return market_pipeline
 
 
 def main(*args, api, symbols=[], expires=[], **kwargs):
-    symbol_queue = Queue.FIFO(name="SymbolQueue", contents=symbols, capacity=None, timeout=None)
-    trade_queue = Queue.FIFO(name="TradeQueue", contents=[], capacity=None, timeout=None)
-    option_file = (Files.Options.Trade + Files.Options.Quote)(name="OptionFile", folder="option", repository=REPOSITORY)
-    queues = Queues(symbol_queue, trade_queue)
-    files = Files(option_file)
-
+    file = (Files.Options.Trade + Files.Options.Quote)(name="MarketFile", folder="market", repository=REPOSITORY)
     authorizer = WebAuthorizer(api=api, authorize=authorize, request=request, access=access, base=base)
     with WebReader(authorizer=authorizer, delay=10) as source:
-        stock_parameters = dict(source=source, queues=queues, files=files)
-        stock_pipeline = stocks(*args, **stock_parameters, **kwargs)
-        stock_thread = RoutineThread(stock_pipeline, name="StockThread")
-        option_parameters = dict(source=source, queues=queues, files=files)
-        option_pipeline = options(*args, **option_parameters, **kwargs)
-        option_thread = RepeatingThread(option_pipeline, name="OptionThread", wait=5).setup(expires=expires)
-
-        stock_thread.start()
-        option_thread.start()
-        while bool(stock_thread) or bool(symbol_queue) or bool(trade_queue):
-            time.sleep(10)
-        stock_thread.cease()
-        option_thread.cease()
-        stock_thread.join()
-        option_thread.join()
+        stocks = StockDownloader(name="StockDownloader", source=source)
+        pipeline = market(*args, source=source, destination=file, **kwargs)
+        trades = [Querys.Trade(series.to_dict()) for series in stocks(symbols)]
+        thread = RoutineThread(pipeline, name="MarketThread").setup(trades, expires=expires)
+        thread.start()
+        thread.cease()
+        thread.join()
 
 
 if __name__ == "__main__":

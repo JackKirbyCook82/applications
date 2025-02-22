@@ -8,7 +8,6 @@ Created on Sat Feb 15 2025
 
 import os
 import sys
-import time
 import json
 import logging
 import warnings
@@ -34,10 +33,9 @@ from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
-from support.synchronize import RoutineThread, RepeatingThread
 from support.pipelines import Producer, Processor, Consumer
-from support.queues import Dequeuer, Requeuer, Queue
 from support.filters import Filter, Criterion
+from support.synchronize import RoutineThread
 from support.variables import DateRange
 from support.transforms import Pivoter
 
@@ -49,10 +47,7 @@ __license__ = "MIT License"
 
 
 class StockDownloader(AlpacaStockDownloader, Producer): pass
-class StockRequeuer(Requeuer, Consumer, parser=pd.Series.to_dict): pass
-
-class TradeDequeuer(Dequeuer, Producer, parser=Querys.Trade): pass
-class ContractDownloader(AlpacaContractDownloader, Processor): pass
+class ContractDownloader(AlpacaContractDownloader, Producer): pass
 class OptionDownloader(AlpacaOptionDownloader, Processor): pass
 class OptionFilter(Filter, Processor, query=Querys.Settlement): pass
 class SecurityCalculator(SecurityCalculator, Processor): pass
@@ -66,8 +61,6 @@ class OrderCalculator(OrderCalculator, Processor): pass
 class OrderUploader(AlpacaOrderUploader, Consumer): pass
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
-class Queues(ntuple("Queues", "trade")): pass
-
 class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
@@ -79,15 +72,7 @@ class ValuationCriterion(Criterion, fields=["apy", "cost", "size"]):
     def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def stocks(*args, source, queues, **kwargs):
-    stock_downloader = StockDownloader(name="StockDownloader", source=source)
-    stock_requeuer = StockRequeuer(name="StockRequeuer", queue=queues.trade)
-    stock_pipeline = stock_downloader + stock_requeuer
-    return stock_pipeline
-
-
-def options(*args, source, header, priority, criterions, queues, **kwargs):
-    trade_dequeuer = TradeDequeuer(name="TradeDequeuer", queue=queues.trade)
+def acquisition(*args, source, header, priority, criterions, **kwargs):
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
     security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
@@ -99,38 +84,25 @@ def options(*args, source, header, priority, criterions, queues, **kwargs):
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=header, priority=priority)
     order_calculator = OrderCalculator(name="OrderCalculator")
     order_uploader = OrderUploader(name="OrderUploader", source=source)
-    acquisition_pipeline = trade_dequeuer + contract_downloader + option_downloader
+    acquisition_pipeline = contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
     acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_pivoter + valuation_filter
     acquisition_pipeline = acquisition_pipeline + prospect_calculator + order_calculator + order_uploader
     return acquisition_pipeline
 
 
-def main(*args, symbols=[], expires=[], criterion={}, api, discount, fees, **kwargs):
-    acquisition_header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    acquisition_priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
-    trade_queue = Queue.FIFO(name="TradeQueue", contents=[], capacity=None, timeout=None)
-    security_criterion = SecurityCriterion(**criterion)
-    valuation_criterion = ValuationCriterion(**criterion)
-    criterions = Criterions(security_criterion, valuation_criterion)
-    queues = Queues(trade_queue)
-
+def main(*args, api, symbols=[], expires=[], criterion={}, discount, fees, **kwargs):
+    header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+    priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
+    criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
     with WebReader(delay=10) as source:
-        stock_parameters = dict(source=source, critierions=criterions, queues=queues)
-        stock_pipeline = stocks(*args, **stock_parameters, **kwargs)
-        stock_thread = RoutineThread(stock_pipeline, name="StockThread").setup(symbols, api=api)
-        option_parameters = dict(source=source, header=acquisition_header, priority=acquisition_priority, criterions=criterions, queues=queues)
-        option_pipeline = options(*args, **option_parameters, **kwargs)
-        option_thread = RepeatingThread(option_pipeline, name="OptionThread", wait=5).setup(symbols, expires=expires, api=api, discount=discount, fees=fees)
-
-        stock_thread.start()
-        option_thread.start()
-        while bool(stock_thread) or bool(trade_queue):
-            time.sleep(10)
-        stock_thread.cease()
-        option_thread.cease()
-        stock_thread.join()
-        option_thread.join()
+        stocks = StockDownloader(name="StockDownloader", source=source)
+        pipeline = acquisition(*args, source=source, header=header, priority=priority, criterions=criterions, **kwargs)
+        trades = [Querys.Trade(series.to_dict()) for series in stocks(symbols, api=api)]
+        thread = RoutineThread(pipeline, name="AcquisitionThread").setup(trades, expires=expires, api=api, discount=discount, fees=fees)
+        thread.start()
+        thread.cease()
+        thread.join()
 
 
 if __name__ == "__main__":
