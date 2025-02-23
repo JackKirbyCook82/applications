@@ -24,7 +24,7 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 API = os.path.join(RESOURCES, "api.txt")
 
-from alpaca.market import AlpacaContractDownloader, AlpacaStockDownloader, AlpacaOptionDownloader
+from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.orders import AlpacaOrderUploader
 from finance.prospects import ProspectCalculator, ProspectHeader
 from finance.orders import OrderCalculator
@@ -33,11 +33,12 @@ from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
-from support.pipelines import Producer, Processor, Consumer
 from support.filters import Filter, Criterion
 from support.synchronize import RoutineThread
+from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.transforms import Pivoter
+from support.processes import Process
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -46,19 +47,20 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class StockDownloader(AlpacaStockDownloader, Producer): pass
-class ContractDownloader(AlpacaContractDownloader, Producer): pass
-class OptionDownloader(AlpacaOptionDownloader, Processor): pass
-class OptionFilter(Filter, Processor, query=Querys.Settlement): pass
-class SecurityCalculator(SecurityCalculator, Processor): pass
-class SecurityFilter(Filter, Processor, query=Querys.Settlement): pass
-class StrategyCalculator(StrategyCalculator, Processor): pass
-class ValuationCalculator(ValuationCalculator, Processor): pass
-class ValuationPivoter(Pivoter, Processor, query=Querys.Settlement): pass
-class ValuationFilter(Filter, Processor, query=Querys.Settlement): pass
-class ProspectCalculator(ProspectCalculator, Processor): pass
-class OrderCalculator(OrderCalculator, Processor): pass
-class OrderUploader(AlpacaOrderUploader, Consumer): pass
+class SymbolDequeuer(Dequeuer, Process, signature="->symbol"): pass
+class StockDownloader(AlpacaStockDownloader, Process, signature="symbol->stock"): pass
+class ContractDownloader(AlpacaContractDownloader, Process, signature="symbol->contract"): pass
+class OptionDownloader(AlpacaOptionDownloader, Process, signature="contract->option"): pass
+class OptionFilter(Filter, Process, query=Querys.Settlement, signature="option->option"): pass
+class SecurityCalculator(SecurityCalculator, Process, signature="stock,option->security"): pass
+class SecurityFilter(Filter, Process, query=Querys.Settlement, signature="security->security"): pass
+class StrategyCalculator(StrategyCalculator, Process, signature="security->strategy"): pass
+class ValuationCalculator(ValuationCalculator, Process, signature="strategy->valuation"): pass
+class ValuationPivoter(Pivoter, Process, query=Querys.Settlement, signature="valuation->valuation"): pass
+class ValuationFilter(Filter, Process, query=Querys.Settlement, signature="valuation->valuation"): pass
+class ProspectCalculator(ProspectCalculator, Process, signature="valuation->prospect"): pass
+class OrderCalculator(OrderCalculator, Process, signature="prospect->order"): pass
+class OrderUploader(AlpacaOrderUploader, Process, signature="order->"): pass
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
 class SecurityCriterion(Criterion, fields=["size"]):
@@ -72,10 +74,12 @@ class ValuationCriterion(Criterion, fields=["apy", "cost", "size"]):
     def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def acquisition(*args, source, header, priority, criterions, **kwargs):
+def acquisition(*args, source, feed, header, priority, criterions, **kwargs):
+    symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
+    stock_downloader = StockDownloader(name="StockDownloader", source=source)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.CENTERED)
+    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.MARKET)
     security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
@@ -84,22 +88,22 @@ def acquisition(*args, source, header, priority, criterions, **kwargs):
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=header, priority=priority)
     order_calculator = OrderCalculator(name="OrderCalculator")
     order_uploader = OrderUploader(name="OrderUploader", source=source)
-    acquisition_pipeline = contract_downloader + option_downloader
+    acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
     acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_pivoter + valuation_filter
     acquisition_pipeline = acquisition_pipeline + prospect_calculator + order_calculator + order_uploader
     return acquisition_pipeline
 
 
-def main(*args, api, symbols=[], expires=[], criterion={}, discount, fees, **kwargs):
+def main(*args, symbols=[], expires=[], api, criterion={}, discount, fees, **kwargs):
     header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+    feed = Queue.LIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
     with WebReader(delay=10) as source:
-        stocks = StockDownloader(name="StockDownloader", source=source)
-        pipeline = acquisition(*args, source=source, header=header, priority=priority, criterions=criterions, **kwargs)
-        trades = [Querys.Trade(series.to_dict()) for series in stocks(symbols, api=api)]
-        thread = RoutineThread(pipeline, name="AcquisitionThread").setup(trades, expires=expires, api=api, discount=discount, fees=fees)
+        pipeline = acquisition(*args, source=source, feed=feed, header=header, priority=priority, criterions=criterions, **kwargs)
+        parameters = dict(expires=expires, api=api, discount=discount, fees=fees)
+        thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
         thread.start()
         thread.cease()
         thread.join()
