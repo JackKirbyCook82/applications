@@ -33,12 +33,12 @@ from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
+from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.filters import Filter, Criterion
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.transforms import Pivoter
-from support.processes import Process
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -47,20 +47,20 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class SymbolDequeuer(Dequeuer, Process, signature="->symbol"): pass
-class StockDownloader(AlpacaStockDownloader, Process, signature="symbol->stock"): pass
-class ContractDownloader(AlpacaContractDownloader, Process, signature="symbol->contract"): pass
-class OptionDownloader(AlpacaOptionDownloader, Process, signature="contract->option"): pass
-class OptionFilter(Filter, Process, query=Querys.Settlement, signature="option->option"): pass
-class SecurityCalculator(SecurityCalculator, Process, signature="stock,option->security"): pass
-class SecurityFilter(Filter, Process, query=Querys.Settlement, signature="security->security"): pass
-class StrategyCalculator(StrategyCalculator, Process, signature="security->strategy"): pass
-class ValuationCalculator(ValuationCalculator, Process, signature="strategy->valuation"): pass
-class ValuationPivoter(Pivoter, Process, query=Querys.Settlement, signature="valuation->valuation"): pass
-class ValuationFilter(Filter, Process, query=Querys.Settlement, signature="valuation->valuation"): pass
-class ProspectCalculator(ProspectCalculator, Process, signature="valuation->prospect"): pass
-class OrderCalculator(OrderCalculator, Process, signature="prospect->order"): pass
-class OrderUploader(AlpacaOrderUploader, Process, signature="order->"): pass
+class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
+class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
+class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
+class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
+class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
+class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
+class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
+class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
+class ValuationPivoter(Pivoter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
+class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
+class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation->prospect"): pass
+class OrderCalculator(OrderCalculator, Carryover, Processor, signature="prospect->order"): pass
+class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="order->"): pass
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
 class SecurityCriterion(Criterion, fields=["size"]):
