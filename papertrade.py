@@ -67,9 +67,10 @@ class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
 
-class ValuationCriterion(Criterion, fields=["apy", "cost", "size"]):
+class ValuationCriterion(Criterion, fields=["apy", "npv", "cost", "size"]):
     def execute(self, table): return self.apy(table) & self.cost(table) & self.size(table)
     def apy(self, table): return table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= self["apy"]
+    def npv(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
     def cost(self, table): return table[("cost", Variables.Valuations.Scenario.MINIMUM)] <= self["cost"]
     def size(self, table): return table[("size", "")] >= self["size"]
 
@@ -100,7 +101,7 @@ def main(*args, symbols=[], expires=[], api, criterion={}, discount, fees, **kwa
     feed = Queue.LIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
-    with WebReader(delay=10) as source:
+    with WebReader(name="AcquisitionReader", delay=2) as source:
         pipeline = acquisition(*args, source=source, feed=feed, header=header, priority=priority, criterions=criterions, **kwargs)
         parameters = dict(expires=expires, api=api, discount=discount, fees=fees)
         thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
@@ -121,7 +122,7 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=1.50, cost=1000, size=10)
+    sysCriterion = dict(apy=2.50, npv=0.10, cost=1000, size=10)
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, discount=0.00, fees=0.00)
 
 
