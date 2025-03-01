@@ -93,14 +93,14 @@ def acquisition(*args, source, feed, header, priority, criterions, **kwargs):
     return acquisition_pipeline
 
 
-def main(*args, symbols=[], expires=[], api, criterion={}, discount, fees, **kwargs):
+def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwargs):
     header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
+    parameters = dict(parameters) | dict(api=api, expires=expires)
     with WebReader(name="AcquisitionReader", delay=2) as source:
         pipeline = acquisition(*args, source=source, feed=feed, header=header, priority=priority, criterions=criterions, **kwargs)
-        parameters = dict(expires=expires, api=api, discount=discount, fees=fees)
         thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
         thread.start()
         thread.cease()
@@ -120,7 +120,8 @@ if __name__ == "__main__":
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
     sysCriterion = dict(apy=1.00, npv=1.00, cost=1000, size=10)
-    main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, discount=0.00, fees=0.00)
+    sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
+    main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
 
 
