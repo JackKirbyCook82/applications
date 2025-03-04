@@ -119,7 +119,7 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=2.50, npv=5.00, cost=1000, size=10)
+    sysCriterion = dict(apy=1.00, npv=0.50, cost=1000, size=10)
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
