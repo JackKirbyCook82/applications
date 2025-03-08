@@ -11,6 +11,7 @@ import sys
 import json
 import logging
 import warnings
+import numpy as np
 import pandas as pd
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
@@ -30,6 +31,7 @@ from finance.prospects import ProspectCalculator, ProspectHeader
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
+from finance.market import MarketCalculator, MarketFilter
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
@@ -57,7 +59,9 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="se
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationPivoter(Pivoter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
+class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->market"): pass
 class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation->prospect"): pass
+class MarketFilter(MarketFilter, Carryover, Processor, signature="prospect,market->prospect"): pass
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
@@ -65,15 +69,14 @@ class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
 
-class ValuationCriterion(Criterion, fields=["apy", "npv", "cost", "size"]):
-    def execute(self, table): return self.apy(table) & self.npv(table) & self.cost(table) & self.size(table)
+class ValuationCriterion(Criterion, fields=["apy", "npv", "size"]):
+    def execute(self, table): return self.apy(table) & self.npv(table) & self.size(table)
     def apy(self, table): return table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= self["apy"]
     def npv(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
-    def cost(self, table): return table[("cost", Variables.Valuations.Scenario.MINIMUM)] <= self["cost"]
     def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def acquisition(*args, source, feed, header, priority, criterions, **kwargs):
+def acquisition(*args, source, feed, header, priority, liquidity, criterions, **kwargs):
     symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
@@ -84,23 +87,27 @@ def acquisition(*args, source, feed, header, priority, criterions, **kwargs):
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=header)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    prospect_calculator = ProspectCalculator(name="ProspectCalculator", header=header, priority=priority)
+    market_filter = MarketCalculator(name="MarketCalculator", liquidity=liquidity)
+    prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, header=header)
+    prospect_filter = MarketFilter(name="ProspectFilter")
     order_uploader = OrderUploader(name="OrderUploader", source=source)
     acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
     acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_pivoter + valuation_filter
-    acquisition_pipeline = acquisition_pipeline + prospect_calculator + order_uploader
+    acquisition_pipeline = acquisition_pipeline + market_filter + prospect_calculator + prospect_filter + order_uploader
     return acquisition_pipeline
 
 
 def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwargs):
     header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
-    priority = lambda cols: cols[("apy", Variables.Valuations.Scenario.MINIMUM)]
+    liquidity = lambda series: np.round(series[("size", "")] * 0.1 if isinstance(series.index, pd.MultiIndex) else series["size"] * 0.1, 0)
+    priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
+    attributes = dict(feed=feed, header=header, priority=priority, liquidity=liquidity, criterions=criterions)
     parameters = dict(parameters) | dict(api=api, expires=expires)
     with WebReader(name="AcquisitionReader", delay=2) as source:
-        pipeline = acquisition(*args, source=source, feed=feed, header=header, priority=priority, criterions=criterions, **kwargs)
+        pipeline = acquisition(*args, source=source, **attributes, **kwargs)
         thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
         thread.start()
         thread.cease()
@@ -119,7 +126,7 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=1.00, npv=0.50, cost=1000, size=10)
+    sysCriterion = dict(apy=0.05, npv=0.05, size=10)
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
