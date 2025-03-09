@@ -31,7 +31,6 @@ from finance.prospects import ProspectCalculator, ProspectHeader
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
-from finance.market import MarketCalculator, MarketFilter
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
@@ -59,9 +58,7 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="se
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationPivoter(Pivoter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->market"): pass
-class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation->prospect"): pass
-class MarketFilter(MarketFilter, Carryover, Processor, signature="prospect,market->prospect"): pass
+class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
@@ -76,7 +73,7 @@ class ValuationCriterion(Criterion, fields=["apy", "npv", "size"]):
     def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def acquisition(*args, source, feed, header, priority, liquidity, criterions, **kwargs):
+def acquisition(*args, source, feed, header, priority, criterions, **kwargs):
     symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
@@ -87,14 +84,12 @@ def acquisition(*args, source, feed, header, priority, liquidity, criterions, **
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=header)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    market_filter = MarketCalculator(name="MarketCalculator", liquidity=liquidity)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, header=header)
-    prospect_filter = MarketFilter(name="ProspectFilter")
     order_uploader = OrderUploader(name="OrderUploader", source=source)
     acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
     acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_pivoter + valuation_filter
-    acquisition_pipeline = acquisition_pipeline + market_filter + prospect_calculator + prospect_filter + order_uploader
+    acquisition_pipeline = acquisition_pipeline + prospect_calculator + order_uploader
     return acquisition_pipeline
 
 
