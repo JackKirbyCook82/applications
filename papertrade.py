@@ -11,7 +11,6 @@ import sys
 import json
 import logging
 import warnings
-import numpy as np
 import pandas as pd
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
@@ -27,7 +26,7 @@ API = os.path.join(RESOURCES, "api.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.orders import AlpacaOrderUploader
-from finance.prospects import ProspectCalculator, ProspectWriter, ProspectHeader
+from finance.prospects import ProspectCalculator, ProspectWriter
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
@@ -74,7 +73,7 @@ class ValuationCriterion(Criterion, fields=["apy", "npv", "size"]):
     def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def acquisition(*args, source, feed, table, priority, liquidity, criterions, **kwargs):
+def acquisition(*args, source, feed, priority, liquidity, criterions, **kwargs):
     symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
@@ -83,10 +82,10 @@ def acquisition(*args, source, feed, table, priority, liquidity, criterions, **k
     security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=table.header)
+    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, liquidity=liquidity, header=table.header)
-    prospect_writer = ProspectWriter(name="ProspectWriter", table=table)
+    prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, liquidity=liquidity, header=)
+    prospect_writer = ProspectWriter(name="ProspectWriter", table=)
     order_uploader = OrderUploader(name="OrderUploader", source=source)
     acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
@@ -96,12 +95,11 @@ def acquisition(*args, source, feed, table, priority, liquidity, criterions, **k
 
 
 def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwargs):
-    header = ProspectHeader(name="AcquisitionHeader", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series[("size", "") if isinstance(series.index, pd.MultiIndex) else "size"] * 0.5
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
-    attributes = dict(feed=feed, header=header, priority=priority, liquidity=liquidity, criterions=criterions)
+    attributes = dict(feed=feed, priority=priority, liquidity=liquidity, criterions=criterions)
     parameters = dict(parameters) | dict(api=api, expires=expires)
     with WebReader(name="AcquisitionReader", delay=2) as source:
         pipeline = acquisition(*args, source=source, **attributes, **kwargs)
