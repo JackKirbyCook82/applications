@@ -83,7 +83,7 @@ def acquisition(*args, source, feed, table, priority, liquidity, criterions, **k
     security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", stack=table.header.stack)
+    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", header=table.header)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, liquidity=liquidity, header=table.header)
     prospect_writer = ProspectWriter(name="ProspectWriter", table=table)
@@ -123,7 +123,7 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=0.25, npv=1.00, size=10)
+    sysCriterion = dict(apy=0.05, npv=0.05, size=10)
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
