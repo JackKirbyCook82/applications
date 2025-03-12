@@ -83,7 +83,7 @@ def acquisition(*args, source, feed, table, priority, liquidity, criterions, **k
     security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", stacking=table.header.stacking)
+    valuation_pivoter = ValuationPivoter(name="ValuationPivoter", stack=table.header.stack)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, liquidity=liquidity, header=table.header)
     prospect_writer = ProspectWriter(name="ProspectWriter", table=table)
