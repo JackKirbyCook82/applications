@@ -9,6 +9,7 @@ Created on Sat Feb 15 2025
 import os
 import sys
 import json
+import time
 import logging
 import warnings
 import pandas as pd
@@ -34,8 +35,8 @@ from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.tables import Table, Header, Renderer
-from support.filters import Filter, Criterion
 from support.synchronize import RoutineThread
+from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.transforms import Pivoter
@@ -107,7 +108,9 @@ def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwar
         pipeline = acquisition(*args, source=source, **attributes, **kwargs)
         thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
         thread.start()
-        thread.cease()
+        while bool(thread):
+            time.sleep(10)
+            print(table)
         thread.join()
 
 
