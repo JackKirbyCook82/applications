@@ -96,9 +96,16 @@ def acquisition(*args, source, feed, table, priority, liquidity, criterions, **k
     return acquisition_pipeline
 
 
+from pprint import pprint
+pprint(ProspectParameters.mapping)
+raise Exception()
+
+
 def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwargs):
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
-    table = Table(header=Header(**dict(ProspectParameters)), renderer=Renderer(**dict(ProspectParameters)))
+    renderer = Renderer(**dict(ProspectParameters))
+    header = Header(**dict(ProspectParameters))
+    table = Table(header=header, renderer=renderer)
     priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series[("size", "") if isinstance(series.index, pd.MultiIndex) else "size"] * 0.5
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
@@ -115,7 +122,7 @@ def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwar
         thread.join()
 
     table.sort("priority", reverse=True)
-    table[("Σnpv", Variables.Valuations.Scenario.MINIMUM)] = table[("npv", Variables.Valuations.Scenario.MINIMUM)].cumsum()
+    table["Σnpv"] = table[("npv", Variables.Valuations.Scenario.MINIMUM)].cumsum()
     table["Σspot"] = table["spot"].cumsum()
     print(table)
 
