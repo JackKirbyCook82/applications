@@ -104,14 +104,20 @@ def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwar
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
     attributes = dict(feed=feed, table=table, priority=priority, liquidity=liquidity, criterions=criterions)
     parameters = dict(parameters) | dict(api=api, expires=expires)
+
     with WebReader(name="AcquisitionReader", delay=2) as source:
         pipeline = acquisition(*args, source=source, **attributes, **kwargs)
         thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
         thread.start()
         while bool(thread):
-            time.sleep(10)
-            print(table)
+            time.sleep(15)
+            if bool(table): pipeline.cease()
         thread.join()
+
+    table.sort("priority", reverse=True)
+    table[("Σnpv", Variables.Valuations.Scenario.MINIMUM)] = table[("npv", Variables.Valuations.Scenario.MINIMUM)].cumsum()
+    table["Σspot"] = table["spot"].cumsum()
+    print(table)
 
 
 if __name__ == "__main__":
@@ -126,7 +132,7 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=0.05, npv=0.05, size=10)
+    sysCriterion = dict(apy=0.05, npv=5, size=10)
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
