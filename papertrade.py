@@ -27,7 +27,7 @@ API = os.path.join(RESOURCES, "api.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.orders import AlpacaOrderUploader
-from finance.prospects import ProspectCalculator, ProspectWriter, ProspectParameters
+from finance.prospects import ProspectCalculator, ProspectParameters
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
@@ -58,7 +58,6 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="se
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
-class ProspectWriter(ProspectWriter, Carryover, Consumer, query=Querys.Settlement, signature="prospect->"): pass
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
@@ -85,13 +84,12 @@ def acquisition(*args, source, feed, table, priority, liquidity, criterions, **k
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, liquidity=liquidity)
-    prospect_writer = ProspectWriter(name="ProspectWriter", table=table)
     order_uploader = OrderUploader(name="OrderUploader", source=source)
     acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
     acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter
-    acquisition_pipeline = acquisition_pipeline + prospect_calculator + prospect_writer
-    return acquisition_pipeline
+    acquisition_pipeline = acquisition_pipeline + prospect_calculator
+    return acquisition_pipeline + order_uploader
 
 
 def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwargs):
@@ -114,11 +112,6 @@ def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwar
             print(table)
         thread.join()
 
-    table.sort("priority", reverse=True)
-    table[("Σnpv", Variables.Valuations.Scenario.MINIMUM)] = table[("npv", Variables.Valuations.Scenario.MINIMUM)].cumsum()
-    table["Σspot"] = table["spot"].cumsum()
-    print(table)
-
 
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
@@ -132,7 +125,7 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=5.00, npv=100, size=10)
+    sysCriterion = dict(apy=1.00, npv=10, size=10)
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
