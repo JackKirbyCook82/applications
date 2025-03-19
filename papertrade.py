@@ -31,7 +31,7 @@ from finance.market import AcquisitionCalculator, DivestitureCalculator
 from finance.prospects import ProspectCalculator
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
-from finance.securities import SecurityCalculator
+from finance.securities import StockCalculator, OptionCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
@@ -48,20 +48,23 @@ __license__ = "MIT License"
 
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
-class PortfolioDownloader(AlpacaPortfolioDownloader, Carryover, Producer, signature="->symbol,contract"): pass
 class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
 class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
-class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
-class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
+class OptionCalculator(OptionCalculator, Carryover, Processor, signature="stock,option->option"): pass
+class StockCalculator(StockCalculator, Carryover, Processor, signature="stock->stock"): pass
+class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,security->acquisition"): pass
-class DivestitureCalculator(DivestitureCalculator, Carryover, Processor, signature="valuation,security->divestiture"): pass
+class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="stock,option,valuation->acquisition"): pass
+class DivestitureCalculator(DivestitureCalculator, Carryover, Processor, signature="stock,option,valuation->divestiture"): pass
 class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="->prospect"): pass
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
+
+class PortfolioDownloader(AlpacaPortfolioDownloader, Carryover, Producer, signature="->symbol,contract"):
+    pass
 
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
@@ -75,20 +78,18 @@ class ValuationCriterion(Criterion, fields=["apy", "npv"]):
     def npv(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
 
 
-def acquisition(*args, source, symbols, priority, liquidity, criterions, **kwargs):
+def acquisition(*args, source, symbols, priority, liquidity, **kwargs):
     symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
-    security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
+    option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+    stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", liquidity=liquidity, priority=priority)
-    acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
-    acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
-    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter + acquisition_calculator
+    acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader + option_calculator + stock_calculator
+    acquisition_pipeline = acquisition_pipeline + strategy_calculator + valuation_calculator + acquisition_calculator
     return acquisition_pipeline
 
 
@@ -96,12 +97,13 @@ def divestiture(*args, source, priority, liquidity, **kwargs):
     portfolio_downloader = PortfolioDownloader(name="PortfolioDownloader", source=source)
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+    option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+    stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", liquidity=liquidity, priority=priority)
-    divestiture_pipeline = portfolio_downloader + stock_downloader + option_downloader + security_calculator + strategy_calculator
-    divestiture_pipeline = divestiture_pipeline + valuation_calculator + divestiture_calculator
+    divestiture_pipeline = portfolio_downloader + stock_downloader + option_downloader + option_calculator + stock_calculator
+    divestiture_pipeline = divestiture_pipeline + strategy_calculator + valuation_calculator + divestiture_calculator
     return divestiture_pipeline
 
 
