@@ -9,7 +9,6 @@ Created on Sat Feb 15 2025
 import os
 import sys
 import json
-import time
 import logging
 import warnings
 import pandas as pd
@@ -26,16 +25,17 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 API = os.path.join(RESOURCES, "api.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
+from alpaca.portfolio import AlpacaPortfolioDownloader
 from alpaca.orders import AlpacaOrderUploader
-from finance.prospects import ProspectCalculator, ProspectParameters
+from finance.market import AcquisitionCalculator, DivestitureCalculator
+from finance.prospects import ProspectCalculator
 from finance.valuations import ValuationCalculator
 from finance.strategies import StrategyCalculator
 from finance.securities import SecurityCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
-from support.tables import Table, Header, Renderer
-from support.synchronize import RoutineThread
+from support.synchronize import RoutineThread, RepeatingThread
 from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
@@ -48,6 +48,7 @@ __license__ = "MIT License"
 
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
+class PortfolioDownloader(AlpacaPortfolioDownloader, Carryover, Producer, signature="->symbol,contract"): pass
 class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
 class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
@@ -57,7 +58,9 @@ class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, sign
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
+class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,security->acquisition"): pass
+class DivestitureCalculator(DivestitureCalculator, Carryover, Processor, signature="valuation,security->divestiture"): pass
+class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="->prospect"): pass
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
@@ -66,51 +69,59 @@ class SecurityCriterion(Criterion, fields=["size"]):
     def execute(self, table): return self.size(table)
     def size(self, table): return table["size"] >= self["size"]
 
-class ValuationCriterion(Criterion, fields=["apy", "npv", "size"]):
-    def execute(self, table): return self.apy(table) & self.npv(table) & self.size(table)
+class ValuationCriterion(Criterion, fields=["apy", "npv"]):
+    def execute(self, table): return self.apy(table) & self.npv(table)
     def apy(self, table): return table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= self["apy"]
     def npv(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
-    def size(self, table): return table[("size", "")] >= self["size"]
 
 
-def acquisition(*args, source, feed, table, priority, liquidity, criterions, **kwargs):
-    symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
+def acquisition(*args, source, symbols, priority, liquidity, criterions, **kwargs):
+    symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
     stock_downloader = StockDownloader(name="StockDownloader", source=source)
     contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.MARKET)
+    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     security_filter = SecurityFilter(name="SecurityFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    prospect_calculator = ProspectCalculator(name="ProspectCalculator", priority=priority, liquidity=liquidity)
-    order_uploader = OrderUploader(name="OrderUploader", source=source)
+    acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", liquidity=liquidity, priority=priority)
     acquisition_pipeline = symbol_dequeuer + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + security_calculator + security_filter + strategy_calculator
-    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter
-    acquisition_pipeline = acquisition_pipeline + prospect_calculator
-    return acquisition_pipeline + order_uploader
+    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter + acquisition_calculator
+    return acquisition_pipeline
 
 
-def main(*args, symbols=[], expires=[], api, criterion={}, parameters={}, **kwargs):
-    feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
-    renderer = Renderer(**dict(ProspectParameters))
-    header = Header(**dict(ProspectParameters))
-    table = Table(header=header, renderer=renderer)
+def divestiture(*args, source, priority, liquidity, **kwargs):
+    portfolio_downloader = PortfolioDownloader(name="PortfolioDownloader", source=source)
+    stock_downloader = StockDownloader(name="StockDownloader", source=source)
+    option_downloader = OptionDownloader(name="OptionDownloader", source=source)
+    security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
+    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+    divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", liquidity=liquidity, priority=priority)
+    divestiture_pipeline = portfolio_downloader + stock_downloader + option_downloader + security_calculator + strategy_calculator
+    divestiture_pipeline = divestiture_pipeline + valuation_calculator + divestiture_calculator
+    return divestiture_pipeline
+
+
+def main(*args, api, symbols=[], expires=[], criterion={}, parameters={}, **kwargs):
+    symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series[("size", "") if isinstance(series.index, pd.MultiIndex) else "size"] * 0.5
     criterions = Criterions(SecurityCriterion(**criterion), ValuationCriterion(**criterion))
-    attributes = dict(feed=feed, table=table, priority=priority, liquidity=liquidity, criterions=criterions)
-    parameters = dict(parameters) | dict(api=api, expires=expires)
+    parameters = dict(api=api, expires=expires) | dict(parameters)
 
-    with WebReader(name="AcquisitionReader", delay=2) as source:
-        pipeline = acquisition(*args, source=source, **attributes, **kwargs)
-        thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
-        thread.start()
-        while bool(thread):
-            time.sleep(30)
-            print(table)
-        thread.join()
+    with WebReader(name="PaperTradeReader", delay=2) as source:
+        arguments = dict(symbols=symbols, expires=expires, priority=priority, liquidity=liquidity, criterions=criterions)
+        acquisitions = acquisition(*args, source=source, **arguments, **kwargs)
+        acquisitions = RoutineThread(acquisitions, name="AcquisitionThread").setup(**parameters)
+        divestitures = divestiture(*args, source=source, **arguments, **kwargs)
+        divestitures = RepeatingThread(divestitures, name="DivestitureThread", wait=60).setup(**parameters)
+        acquisitions.start()
+        divestitures.start()
+        acquisitions.join()
+        divestitures.join()
 
 
 if __name__ == "__main__":
@@ -125,8 +136,8 @@ if __name__ == "__main__":
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterion = dict(apy=1.00, npv=10, size=10)
-    sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.LIMIT, tenure=Variables.Markets.Tenure.DAY)
+    sysCriterion = dict(apy=2.50, npv=50, size=10)
+    sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Terms.MARKET, tenure=Variables.Markets.Tenure.FILLKILL, date=Datetime.now().date())
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterion=sysCriterion, parameters=sysParameters)
 
 
