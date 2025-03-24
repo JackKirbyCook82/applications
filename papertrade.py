@@ -9,7 +9,6 @@ Created on Sat Feb 15 2025
 import os
 import sys
 import json
-import random
 import logging
 import warnings
 import pandas as pd
@@ -28,7 +27,7 @@ API = os.path.join(RESOURCES, "api.txt")
 from alpaca.market import AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from alpaca.orders import AlpacaOrderUploader
-from finance.market import AcquisitionCalculator, DivestitureCalculator
+from finance.market import MarketCalculator
 from finance.securities import OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -37,7 +36,7 @@ from finance.prospects import ProspectCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
-from support.synchronize import RoutineThread, RepeatingThread
+from support.synchronize import RoutineThread
 from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
@@ -58,10 +57,8 @@ class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signat
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class StabilityCalculator(StabilityCalculator, Carryover, Processor, signature="valuation,option->valuation"): pass
-class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
-class DivestitureCalculator(DivestitureCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
-class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="acquisition->prospect"): pass
+class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,option->valuation"): pass
+class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation->prospect"): pass
 class OrderCalculator(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
@@ -86,34 +83,17 @@ def acquisition(*args, source, symbols, priority, liquidity, criterions, **kwarg
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    stability_calculator = StabilityCalculator(name="StabilityCalculator")
-#    acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", liquidity=liquidity, priority=priority)
-    divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", liquidity=liquidity, priority=priority)
+    market_calculator = MarketCalculator(name="MarketCalculator", liquidity=liquidity, priority=priority)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator")
     order_uploader = OrderCalculator(name="OrderUploader", source=source)
     acquisition_pipeline = symbol_dequeuer + contract_downloader + option_downloader + option_calculator + option_filter + strategy_calculator
-#    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter + acquisition_calculator + prospect_calculator + order_uploader
-    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter + stability_calculator + divestiture_calculator + prospect_calculator + order_uploader
+    acquisition_pipeline = acquisition_pipeline + valuation_calculator + valuation_filter + market_calculator + prospect_calculator + order_uploader
     return acquisition_pipeline
-
-
-def divestiture(*args, source, priority, liquidity, criterions, **kwargs):
-    portfolio_downloader = PortfolioDownloader(name="PortfolioDownloader", source=source)
-    option_downloader = OptionDownloader(name="OptionDownloader", source=source)
-    option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
-    option_filter = OptionFilter(name="OptionFilter", criterion=criterions.security)
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
-    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    stability_calculator = StabilityCalculator(name="StabilityCalculator")
-    divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", liquidity=liquidity, priority=priority)
-    divestiture_pipeline = portfolio_downloader + option_downloader + option_calculator + strategy_calculator + valuation_calculator + stability_calculator + divestiture_calculator
-    return divestiture_pipeline
 
 
 def main(*args, api, symbols=[], expires=[], criterions, parameters={}, **kwargs):
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
-    priority = lambda series: (int(series[("apy", Variables.Valuations.Scenario.MINIMUM)]), int(series[("npv", Variables.Valuations.Scenario.MINIMUM)]))
+    priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: round(series[("size", "") if isinstance(series.index, pd.MultiIndex) else "size"] * 0.25)
     arguments = dict(symbols=symbols, expires=expires, priority=priority, liquidity=liquidity)
     parameters = dict(api=api, expires=expires) | dict(parameters)
@@ -121,8 +101,6 @@ def main(*args, api, symbols=[], expires=[], criterions, parameters={}, **kwargs
     with WebReader(name="PaperTradeReader", delay=2) as source:
         acquisitions = acquisition(*args, source=source, criterions=criterions.acquisition, **arguments, **kwargs)
         acquisitions = RoutineThread(acquisitions, name="AcquisitionThread").setup(**parameters)
-        divestitures = divestiture(*args, source=source, criterions=criterions.divestiture, **arguments, **kwargs)
-        divestitures = RepeatingThread(divestitures, name="DivestitureThread", wait=60).setup(**parameters)
         acquisitions.start()
         acquisitions.join()
 
@@ -136,14 +114,13 @@ if __name__ == "__main__":
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
-        random.shuffle(sysSymbols)
         sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
     sysAcquisitions = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=10.00, npv=100))
     sysDivestitures = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=0.00, npv=0))
     sysCriterions = Transaction(sysAcquisitions, sysDivestitures)
-    sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Term.MARKET, tenure=Variables.Markets.Tenure.FILLKILL, date=Datetime.now().date())
+    sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.FILLKILL, date=Datetime.now().date())
     main(api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterions=sysCriterions, parameters=sysParameters)
 
 
