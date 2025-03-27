@@ -33,7 +33,7 @@ from finance.market import AcquisitionCalculator, DivestitureCalculator
 from finance.securities import StockCalculator, OptionCalculator, ExposureCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
-from finance.stability import StabilityCalculator, StabilityFilter
+from finance.stability import StabilityCalculator
 from finance.prospects import ProspectCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
@@ -58,12 +58,11 @@ class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="
 class StockCalculator(StockCalculator, Carryover, Processor, signature="stock->stock"): pass
 class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
 class ExposureCalculator(ExposureCalculator, Carryover, Processor, signature="option->option"): pass
-class StabilityCalculator(StabilityCalculator, Carryover, Processor, signature="option->stability"): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class StabilityFilter(StabilityFilter, Carryover, Processor, signature="valuation,stability->valuation"): pass
+class StabilityCalculator(StabilityCalculator, Carryover, Processor, signature="valuation,option->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->valuation"): pass
 class DivestitureCalculator(DivestitureCalculator, Carryover, Processor, signature="valuation,option->valuation"): pass
 class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuation->prospect"): pass
@@ -105,15 +104,14 @@ def divestiture(*args, source, priority, liquidity, criterions, **kwargs):
     option_downloader = OptionDownloader(name="OptionDownloader", source=source)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     exposure_calculator = ExposureCalculator(name="ExposureCalculator")
-    stability_calculator = StabilityCalculator(name="StabilityCalculator")
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    stability_filter = StabilityFilter(name="StabilityFilter")
+    stability_calculator = StabilityCalculator(name="StabilityCalculator")
     divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", liquidity=liquidity, priority=priority)
     prospect_calculator = ProspectCalculator(name="ProspectCalculator")
     order_uploader = OrderCalculator(name="OrderUploader", source=source)
-    divestiture_pipeline = portfolio_downloader + option_downloader + option_calculator + exposure_calculator + stability_calculator + strategy_calculator
-    divestiture_pipeline = divestiture_pipeline + valuation_calculator + stability_filter + divestiture_calculator + prospect_calculator + order_uploader
+    divestiture_pipeline = portfolio_downloader + option_downloader + option_calculator + exposure_calculator + strategy_calculator
+    divestiture_pipeline = divestiture_pipeline + valuation_calculator + stability_calculator + divestiture_calculator + prospect_calculator + order_uploader
     return divestiture_pipeline
 
 
@@ -129,8 +127,8 @@ def main(*args, api, symbols=[], expires=[], criterions, parameters={}, **kwargs
         divestitures = divestiture(*args, source=source, criterions=criterions.divestiture, **arguments, **kwargs)
         acquisitions = RoutineThread(acquisitions, name="AcquisitionThread").setup(**parameters)
         divestitures = RepeatingThread(divestitures, name="DivestitureThread", wait=60).setup(**parameters)
-        divestitures.start()
-        divestitures.join()
+        acquisitions.start()
+        acquisitions.join()
 
 
 if __name__ == "__main__":
