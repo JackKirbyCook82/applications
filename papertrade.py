@@ -121,12 +121,12 @@ def order(producer, *args, source, **kwargs):
     return order_pipeline
 
 
-def main(*args, website, api, symbols=[], expires=[], criterions, parameters={}, **kwargs):
+def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: min(int(series[("size", "") if isinstance(series.index, pd.MultiIndex) else "size"]), 1)
-    arguments = dict(expires=expires, criterions=criterions, priority=priority, liquidity=liquidity)
-    parameters = dict(api=api, expires=expires) | dict(parameters)
+    arguments = dict(criterions=criterions, priority=priority, liquidity=liquidity)
+    parameters = dict(api=api, expiry=expiry) | dict(parameters)
 
     with WebReader(authorizer=authorizer(website=website, api=api), delay=3) as source:
         symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
@@ -144,16 +144,17 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
+    sysWebSite = Website.ALPACA
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
-        sysExpires = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
+        sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
-        sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
-    sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=1000, npv=100))
+        sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())[str(sysWebSite.name).lower()])
+    sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=1, npv=10))
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY, date=Datetime.now().date())
-    main(website=Website.ETRADE, api=sysAPI, symbols=sysSymbols, expires=sysExpires, criterions=sysCriterions, parameters=sysParameters)
+    main(website=sysWebSite, api=sysAPI, symbols=sysSymbols, expiry=sysExpiry, criterions=sysCriterions, parameters=sysParameters)
 
 
 
