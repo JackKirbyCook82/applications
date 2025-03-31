@@ -152,7 +152,7 @@ if __name__ == "__main__":
         sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())[str(sysWebSite.name).lower()])
-    sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=1, npv=10))
+    sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=0.25, npv=2.5))
     sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY, date=Datetime.now().date())
     main(website=sysWebSite, api=sysAPI, symbols=sysSymbols, expiry=sysExpiry, criterions=sysCriterions, parameters=sysParameters)
 
