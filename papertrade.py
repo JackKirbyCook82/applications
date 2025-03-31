@@ -27,12 +27,12 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 API = os.path.join(RESOURCES, "api.txt")
 
-from alpaca.market import AlpacaOptionDownloader, AlpacaContractDownloader
-from etrade.market import ETradeOptionDownloader, ETradeExpireDownloader
+from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
+from etrade.market import ETradeStockDownloader, ETradeOptionDownloader, ETradeExpireDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from alpaca.orders import AlpacaOrderUploader
-from finance.market import AcquisitionCalculator
-from finance.securities import OptionCalculator
+from finance.market import MarketCalculator
+from finance.securities import StockCalculator, OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.variables import Variables, Querys, Strategies
@@ -60,16 +60,19 @@ base = "https://api.etrade.com"
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
 class PortfolioDownloader(AlpacaPortfolioDownloader, Carryover, Producer, signature="->contract"): pass
+class AlpacaStockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class AlpacaContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
 class AlpacaOptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
+class ETradeStockDownloader(ETradeStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class ETradeExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
 class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
+class StockCalculator(StockCalculator, Carryover, Processor, signature="stock->stock"): pass
 class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
+class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
 class OrderCalculator(AlpacaOrderUploader, Carryover, Consumer, signature="acquisition->"): pass
 
 
@@ -89,16 +92,18 @@ def feed(*args, website, **kwargs): raise ValueError(website)
 
 @feed.register(Website.ALPACA)
 def alpaca(producer, *args, source, **kwargs):
+    stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source)
     contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source)
     option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source)
-    alpaca_producer = producer + contract_downloader + option_downloader
+    alpaca_producer = producer + stock_downloader + contract_downloader + option_downloader
     return alpaca_producer
 
 @feed.register(Website.ETRADE)
 def etrade(producer, *args, source, **kwargs):
+    stock_downloader = ETradeStockDownloader(name="StockDownloader", source=source)
     expire_downloader = ETradeExpireDownloader(name="ExpireDownloader", source=source)
     option_downloader = ETradeOptionDownloader(name="OptionDownloader", source=source)
-    etrade_producer = producer + expire_downloader + option_downloader
+    etrade_producer = producer + stock_downloader + expire_downloader + option_downloader
     return etrade_producer
 
 def authorizer(*args, website, api, **kwargs):
@@ -111,7 +116,7 @@ def acquisition(producer, *args, priority, liquidity, criterions, **kwargs):
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", liquidity=liquidity, priority=priority)
+    acquisition_calculator = MarketCalculator(name="MarketCalculator", liquidity=liquidity, priority=priority)
     acquisition_pipeline = producer + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculator
     return acquisition_pipeline
 
