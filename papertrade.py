@@ -69,7 +69,7 @@ class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signa
 class StockCalculator(StockCalculator, Carryover, Processor, signature="stock->stock"): pass
 class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
@@ -111,13 +111,14 @@ def authorizer(*args, website, api, **kwargs):
     else: return None
 
 def acquisition(producer, *args, priority, liquidity, criterions, **kwargs):
+    stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_filter = OptionFilter(name="OptionFilter", criterion=criterions.security)
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies.Verticals))
+    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     acquisition_calculator = MarketCalculator(name="MarketCalculator", liquidity=liquidity, priority=priority)
-    acquisition_pipeline = producer + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculator
+    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculator
     return acquisition_pipeline
 
 def order(producer, *args, source, **kwargs):
