@@ -117,8 +117,8 @@ def acquisition(producer, *args, priority, liquidity, criterions, **kwargs):
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    acquisition_calculator = MarketCalculator(name="MarketCalculator", liquidity=liquidity, priority=priority)
-    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculator
+    market_calculator = MarketCalculator(name="MarketCalculator", liquidity=liquidity, priority=priority)
+    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + market_calculator
     return acquisition_pipeline
 
 def order(producer, *args, source, **kwargs):
@@ -130,7 +130,7 @@ def order(producer, *args, source, **kwargs):
 def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
-    liquidity = lambda series: min(int(series[("size", "") if isinstance(series.index, pd.MultiIndex) else "size"]), 1)
+    liquidity = lambda series: series["size"] * 1
     arguments = dict(criterions=criterions, priority=priority, liquidity=liquidity)
     parameters = dict(api=api, expiry=expiry) | dict(parameters)
 
