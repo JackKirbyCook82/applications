@@ -110,6 +110,16 @@ def authorizer(*args, website, api, **kwargs):
     if website is Website.ETRADE: return WebAuthorizer(api=api, authorize=authorize, request=request, access=access, base=base)
     else: return None
 
+def calculation(producer, *args, criterions, **kwargs):
+    stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+    option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+    option_filter = OptionFilter(name="OptionFilter", criterion=criterions.security)
+    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
+    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
+    calculation_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter
+    return calculation_pipeline
+
 def acquisition(producer, *args, priority, liquidity, criterions, **kwargs):
     stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
@@ -130,18 +140,23 @@ def order(producer, *args, source, **kwargs):
 def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
-    liquidity = lambda series: series["size"] * 1
+    liquidity = lambda series: series["size"] * 0.1
     arguments = dict(criterions=criterions, priority=priority, liquidity=liquidity)
     parameters = dict(api=api, expiry=expiry) | dict(parameters)
 
     with WebReader(authorizer=authorizer(website=website, api=api), delay=3) as source:
         symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
         feed_pipeline = feed(symbol_dequeuer, *args, website=website, source=source, **arguments, **kwargs)
-        acquisition_pipeline = acquisition(feed_pipeline, *args, **arguments, **kwargs)
-        order_pipeline = order(acquisition_pipeline, *args, source=source, **arguments, **kwargs)
-        acquisitions = RoutineThread(order_pipeline, name="AcquisitionThread").setup(**parameters)
-        acquisitions.start()
-        acquisitions.join()
+        calculation_pipeline = calculation(feed_pipeline, *args, **arguments, **kwargs)
+        calculations = RoutineThread(calculation_pipeline, name="CalculationThread").setup(**parameters)
+        calculations.start()
+        calculations.join()
+
+#        acquisition_pipeline = acquisition(feed_pipeline, *args, **arguments, **kwargs)
+#        order_pipeline = order(acquisition_pipeline, *args, source=source, **arguments, **kwargs)
+#        acquisitions = RoutineThread(order_pipeline, name="AcquisitionThread").setup(**parameters)
+#        acquisitions.start()
+#        acquisitions.join()
 
 
 if __name__ == "__main__":
