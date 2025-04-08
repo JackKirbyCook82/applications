@@ -9,6 +9,7 @@ Created on Sat Feb 15 2025
 import os
 import sys
 import json
+import time
 import random
 import logging
 import warnings
@@ -30,8 +31,7 @@ API = os.path.join(RESOURCES, "api.txt")
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from etrade.market import ETradeStockDownloader, ETradeOptionDownloader, ETradeExpireDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
-from alpaca.orders import AlpacaOrderUploader
-from finance.market import MarketCalculator
+from finance.market import AcquisitionCalculator
 from finance.securities import StockCalculator, OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -43,6 +43,7 @@ from support.synchronize import RoutineThread
 from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
+from support.files import Saver
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -72,19 +73,16 @@ class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signat
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
-class OrderCalculator(AlpacaOrderUploader, Carryover, Consumer, signature="acquisition->"): pass
+class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
+class AcquisitionSaver(Saver, Carryover, Consumer, query=Querys.Settlement, signature="acquisition->"): pass
 
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
 class SecurityCriterion(Criterion, ABC, fields=["size"]):
-    def execute(self, table): return self.size(table)
-    def size(self, table): return table["size"] >= self["size"]
+    def execute(self, table): return table["size"] >= self["size"]
 
-class ValuationCriterion(Criterion, fields=["apy", "npv"]):
-    def execute(self, table): return self.apy(table) & self.npv(table)
-    def apy(self, table): return table[("apy", Variables.Valuations.Scenario.MINIMUM)] >= self["apy"]
-    def npv(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
+class ValuationCriterion(Criterion, fields=["npv"]):
+    def execute(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
 
 
 @ValueDispatcher(locator="website")
@@ -110,36 +108,21 @@ def authorizer(*args, website, api, **kwargs):
     if website is Website.ETRADE: return WebAuthorizer(api=api, authorize=authorize, request=request, access=access, base=base)
     else: return None
 
-def calculation(producer, *args, criterions, **kwargs):
+def acquisition(producer, *args, criterions, priority, liquidity, **kwargs):
     stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_filter = OptionFilter(name="OptionFilter", criterion=criterions.security)
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    calculation_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter
-    return calculation_pipeline
-
-def acquisition(producer, *args, priority, liquidity, criterions, **kwargs):
-    stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
-    option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
-    option_filter = OptionFilter(name="OptionFilter", criterion=criterions.security)
-    strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
-    valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    market_calculator = MarketCalculator(name="MarketCalculator", liquidity=liquidity, priority=priority)
-    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + market_calculator
+    acquisition_calculation = AcquisitionCalculator(name="AcquisitionCalculator", priority=priority, liquidity=liquidity)
+    acquisition_saver = AcquisitionSaver(name="AcquisitionSaver")
+    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculation + acquisition_saver
     return acquisition_pipeline
-
-def order(producer, *args, source, **kwargs):
-    order_uploader = OrderCalculator(name="OrderUploader", source=source)
-    order_pipeline = producer + order_uploader
-    return order_pipeline
-
 
 def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
-    priority = lambda series: series[("apy", Variables.Valuations.Scenario.MINIMUM)]
+    priority = lambda series: series[("npv", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series["size"] * 0.1
     arguments = dict(criterions=criterions, priority=priority, liquidity=liquidity)
     parameters = dict(api=api, expiry=expiry) | dict(parameters)
@@ -147,16 +130,10 @@ def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, 
     with WebReader(authorizer=authorizer(website=website, api=api), delay=3) as source:
         symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
         feed_pipeline = feed(symbol_dequeuer, *args, website=website, source=source, **arguments, **kwargs)
-        calculation_pipeline = calculation(feed_pipeline, *args, **arguments, **kwargs)
-        calculations = RoutineThread(calculation_pipeline, name="CalculationThread").setup(**parameters)
-        calculations.start()
-        calculations.join()
-
-#        acquisition_pipeline = acquisition(feed_pipeline, *args, **arguments, **kwargs)
-#        order_pipeline = order(acquisition_pipeline, *args, source=source, **arguments, **kwargs)
-#        acquisitions = RoutineThread(order_pipeline, name="AcquisitionThread").setup(**parameters)
-#        acquisitions.start()
-#        acquisitions.join()
+        acquisition_pipeline = acquisition(feed_pipeline, *args, **arguments, **kwargs)
+        acquisitions_thread = RoutineThread(acquisition_pipeline, name="AcquisitionThread").setup(**parameters)
+        acquisitions_thread.start()
+        acquisitions_thread.join()
 
 
 if __name__ == "__main__":
@@ -173,8 +150,8 @@ if __name__ == "__main__":
         sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     with open(API, "r") as apifile:
         sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())[str(sysWebSite.name).lower()])
-    sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(apy=0.25, npv=2.5))
-    sysParameters = dict(discount=0.00, fees=0.00, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY, date=Datetime.now().date())
+    sysCriterions = Criterions(SecurityCriterion(size=25), ValuationCriterion(npv=100))
+    sysParameters = dict(discount=0.50, fees=1.00, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY, date=Datetime.now().date())
     main(website=sysWebSite, api=sysAPI, symbols=sysSymbols, expiry=sysExpiry, criterions=sysCriterions, parameters=sysParameters)
 
 
