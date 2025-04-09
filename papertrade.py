@@ -9,7 +9,6 @@ Created on Sat Feb 15 2025
 import os
 import sys
 import json
-import time
 import random
 import logging
 import warnings
@@ -31,7 +30,7 @@ API = os.path.join(RESOURCES, "api.txt")
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from etrade.market import ETradeStockDownloader, ETradeOptionDownloader, ETradeExpireDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
-from finance.market import AcquisitionCalculator
+from finance.market import AcquisitionCalculator, AcquisitionParameters
 from finance.securities import StockCalculator, OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -43,7 +42,7 @@ from support.synchronize import RoutineThread
 from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.files import Saver
+from support.files import Saver, File
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -74,7 +73,14 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="st
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
-class AcquisitionSaver(Saver, Carryover, Consumer, query=Querys.Settlement, signature="acquisition->"): pass
+class AcquisitionSaver(Saver, Carryover, Consumer, query=Querys.Settlement, signature="acquisition->"):
+    @staticmethod
+    def parser(dataframe, *args, **kwargs):
+        headers = [[column for column in dataframe.columns if not column[-1] or column == scenario] for scenario in list(Variables.Valuations.Scenario)]
+        dataframes = [dataframe[columns] for columns in headers]
+        dataframe = pd.concat(dataframes, axis=1)
+        print(dataframe)
+        raise Exception()
 
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
@@ -108,7 +114,7 @@ def authorizer(*args, website, api, **kwargs):
     if website is Website.ETRADE: return WebAuthorizer(api=api, authorize=authorize, request=request, access=access, base=base)
     else: return None
 
-def acquisition(producer, *args, criterions, priority, liquidity, **kwargs):
+def acquisition(producer, *args, file, criterions, priority, liquidity, **kwargs):
     stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_filter = OptionFilter(name="OptionFilter", criterion=criterions.security)
@@ -116,11 +122,12 @@ def acquisition(producer, *args, criterions, priority, liquidity, **kwargs):
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     acquisition_calculation = AcquisitionCalculator(name="AcquisitionCalculator", priority=priority, liquidity=liquidity)
-    acquisition_saver = AcquisitionSaver(name="AcquisitionSaver")
+    acquisition_saver = AcquisitionSaver(name="AcquisitionSaver", file=file, mode="a")
     acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculation + acquisition_saver
     return acquisition_pipeline
 
 def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
+    file = File(repository=REPOSITORY, folder="acquisition", **dict(AcquisitionParameters))
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("npv", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series["size"] * 0.1
@@ -130,7 +137,7 @@ def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, 
     with WebReader(authorizer=authorizer(website=website, api=api), delay=3) as source:
         symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
         feed_pipeline = feed(symbol_dequeuer, *args, website=website, source=source, **arguments, **kwargs)
-        acquisition_pipeline = acquisition(feed_pipeline, *args, **arguments, **kwargs)
+        acquisition_pipeline = acquisition(feed_pipeline, *args, file=file, **arguments, **kwargs)
         acquisitions_thread = RoutineThread(acquisition_pipeline, name="AcquisitionThread").setup(**parameters)
         acquisitions_thread.start()
         acquisitions_thread.join()
