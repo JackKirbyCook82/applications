@@ -30,7 +30,7 @@ API = os.path.join(RESOURCES, "api.txt")
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from etrade.market import ETradeStockDownloader, ETradeOptionDownloader, ETradeExpireDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
-from finance.market import AcquisitionCalculator, AcquisitionParameters
+from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionParameters
 from finance.securities import StockCalculator, OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -42,7 +42,7 @@ from support.synchronize import RoutineThread
 from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.files import Saver, File
+from support.files import File
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -73,14 +73,7 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="st
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
-class AcquisitionSaver(Saver, Carryover, Consumer, query=Querys.Settlement, signature="acquisition->"):
-    @staticmethod
-    def parser(dataframe, *args, **kwargs):
-        headers = [[column for column in dataframe.columns if not column[-1] or column == scenario] for scenario in list(Variables.Valuations.Scenario)]
-        dataframes = [dataframe[columns] for columns in headers]
-        dataframe = pd.concat(dataframes, axis=1)
-        print(dataframe)
-        raise Exception()
+class AcquisitionSaver(AcquisitionSaver, Carryover, Consumer, signature="acquisition->"): pass
 
 
 class Criterions(ntuple("Criterion", "security valuation")): pass
@@ -127,7 +120,7 @@ def acquisition(producer, *args, file, criterions, priority, liquidity, **kwargs
     return acquisition_pipeline
 
 def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
-    file = File(repository=REPOSITORY, folder="acquisition", **dict(AcquisitionParameters))
+    file = File(repository=REPOSITORY, folder="acquisitions", **dict(AcquisitionParameters))
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     priority = lambda series: series[("npv", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series["size"] * 0.1
