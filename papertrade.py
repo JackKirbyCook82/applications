@@ -34,6 +34,7 @@ from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionP
 from finance.securities import StockCalculator, OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
+from finance.rigorous import RigorousCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizer, WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
@@ -72,6 +73,7 @@ class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signat
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
+class RigorousCalculator(RigorousCalculator, Carryover, Processor, signature="valuation->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
 class AcquisitionSaver(AcquisitionSaver, Carryover, Consumer, signature="acquisition->"): pass
 
@@ -114,9 +116,10 @@ def acquisition(producer, *args, file, criterions, priority, liquidity, **kwargs
     strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
-    acquisition_calculation = AcquisitionCalculator(name="AcquisitionCalculator", priority=priority, liquidity=liquidity)
+    rigorous_calculator = RigorousCalculator(name="RigorousCalculator")
+    acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=priority, liquidity=liquidity)
     acquisition_saver = AcquisitionSaver(name="AcquisitionSaver", file=file, mode="a")
-    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculation + acquisition_saver
+    acquisition_pipeline = producer + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + rigorous_calculator + acquisition_calculator + acquisition_saver
     return acquisition_pipeline
 
 def main(*args, website, api, symbols=[], expiry=[], criterions, parameters={}, **kwargs):
