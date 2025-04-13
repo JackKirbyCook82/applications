@@ -57,7 +57,7 @@ class AlpacaContractDownloader(AlpacaContractDownloader, Carryover, Processor, s
 class AlpacaOptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
 class StockCalculator(StockCalculator, Carryover, Processor, signature="stock,technical->stock"): pass
-class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option,stock->option"): pass
+class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
