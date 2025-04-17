@@ -34,6 +34,7 @@ from finance.securities import StockCalculator, OptionCalculator
 from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
+from finance.payoff import PayoffCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
@@ -63,6 +64,7 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="st
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
+class PayoffCalculator(PayoffCalculator, Carryover, Processor, signature="acquisition->acquisition"): pass
 class AcquisitionSaver(AcquisitionSaver, Carryover, Consumer, signature="acquisition->"): pass
 
 
@@ -87,11 +89,12 @@ def acquisition(producer, *args, source, file, criterions, priority, liquidity, 
     valuation_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=priority, liquidity=liquidity)
+    payoff_calculator = PayoffCalculator(name="PayoffCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
     acquisition_saver = AcquisitionSaver(name="AcquisitionSaver", file=file, mode="a")
     acquisition_pipeline = producer + bars_downloader + stock_downloader + contract_downloader + option_downloader
     acquisition_pipeline = acquisition_pipeline + technical_calculator + stock_calculator + option_calculator + option_filter
     acquisition_pipeline = acquisition_pipeline + strategy_calculator + valuation_calculator + valuation_filter
-    acquisition_pipeline = acquisition_pipeline + acquisition_calculator + acquisition_saver
+    acquisition_pipeline = acquisition_pipeline + acquisition_calculator + payoff_calculator + acquisition_saver
     return acquisition_pipeline
 
 
