@@ -121,9 +121,6 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
-
-        sysTickers = ["AAPL"]
-
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
     with open(API, "r") as apifile:
