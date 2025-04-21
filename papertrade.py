@@ -14,6 +14,7 @@ import logging
 import warnings
 import pandas as pd
 from abc import ABC
+from enum import Enum
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
@@ -26,24 +27,24 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 API = os.path.join(RESOURCES, "api.txt")
 
+from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.history import AlpacaBarsDownloader
 from alpaca.orders import AlpacaOrderUploader
-
-from finance.market import AcquisitionCalculator, AcquisitionParameters
+from finance.market import AcquisitionCalculator
 from finance.securities import StockCalculator, OptionCalculator
 from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.payoff import PayoffCalculator
 from finance.variables import Variables, Querys, Strategies
-from webscraping.webreaders import WebAuthorizerAPI, WebReader
+from webscraping.webreaders import WebAuthorizerAPI, WebReader, WebAuthorizer
 from support.pipelines import Producer, Processor, Consumer, Carryover
+from support.decorators import ValueDispatcher
 from support.synchronize import RoutineThread
 from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.files import File
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -52,11 +53,21 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+Website = Enum("WebSite", "ALPACA ETRADE")
+authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
+request = "https://api.etrade.com/oauth/request_token"
+access = "https://api.etrade.com/oauth/access_token"
+base = "https://api.etrade.com"
+
+
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
 class AlpacaBarsDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="symbol->technical"): pass
 class AlpacaStockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class AlpacaContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
 class AlpacaOptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
+class ETradeStockDownloader(ETradeStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
+class ETradeExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
+class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
 class StockCalculator(StockCalculator, Carryover, Processor, signature="stock,technical->stock"): pass
 class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
@@ -77,11 +88,28 @@ class ValuationCriterion(Criterion, fields=["npv"]):
     def execute(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
 
 
-def acquisition(producer, *args, source, file, criterions, priority, liquidity, **kwargs):
-    bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source)
-    stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source)
-    contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source)
-    option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source)
+@ValueDispatcher(locator="website")
+def feed(*args, website, **kwargs): raise ValueError(website)
+
+@feed.register(Website.ALPACA)
+def alpaca(producer, *args, sources, api, **kwargs):
+    stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=sources[Website.ALPACA], api=api[Website.ALPACA])
+    bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=sources[Website.ALPACA], api=api[Website.ALPACA])
+    contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=sources[Website.ALPACA], api=api[Website.ALPACA])
+    option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=sources[Website.ALPACA], api=api[Website.ALPACA])
+    alpaca_producer = producer + bars_downloader + stock_downloader + contract_downloader + option_downloader
+    return alpaca_producer
+
+@feed.register(Website.ETRADE)
+def etrade(producer, *args, sources, api, **kwargs):
+    stock_downloader = ETradeStockDownloader(name="StockDownloader", source=sources[Website.ETRADE])
+    bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=sources[Website.ALPACA], api=api[Website.ALPACA])
+    expire_downloader = ETradeExpireDownloader(name="ExpireDownloader", source=sources[Website.ETRADE])
+    option_downloader = ETradeOptionDownloader(name="OptionDownloader", source=sources[Website.ETRADE])
+    etrade_producer = producer + bars_downloader + stock_downloader + expire_downloader + option_downloader
+    return etrade_producer
+
+def acquisition(producer, *args, criterions, priority, liquidity, **kwargs):
     technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Analysis.Technical.STATISTIC])
     stock_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
     option_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
@@ -91,23 +119,25 @@ def acquisition(producer, *args, source, file, criterions, priority, liquidity, 
     valuation_filter = ValuationFilter(name="ValuationFilter", criterion=criterions.valuation)
     acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=priority, liquidity=liquidity)
     payoff_calculator = PayoffCalculator(name="PayoffCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-    order_uploader = AlpacaOrderUploader(name="OrderUploader", source=source)
-    acquisition_pipeline = producer + bars_downloader + stock_downloader + contract_downloader + option_downloader + technical_calculator + stock_calculator + option_calculator + option_filter
-    acquisition_pipeline = acquisition_pipeline + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculator + payoff_calculator + order_uploader
-    return acquisition_pipeline
+    return producer + technical_calculator + stock_calculator + option_calculator + option_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisition_calculator + payoff_calculator
+
+def order(producer, *args, sources, api, **kwargs):
+    order_uploader = AlpacaOrderUploader(name="OrderUploader", source=sources[Website.ALPACA], api=api[Website.ALPACA])
+    return producer + order_uploader
 
 
-def main(*args, api, symbols=[], dates=[], expiry=[], criterions, parameters={}, **kwargs):
-    file = File(repository=REPOSITORY, folder="acquisitions", **dict(AcquisitionParameters))
+def main(*args, api, symbols=[], parameters={}, criterions, **kwargs):
     symbols = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
+    authorizer = WebAuthorizer(api=api[Website.ETRADE], authorize=authorize, request=request, access=access, base=base)
     priority = lambda series: series[("npv", Variables.Valuations.Scenario.MINIMUM)]
     liquidity = lambda series: series["size"] * 0.1
-    arguments = dict(criterions=criterions, priority=priority, liquidity=liquidity)
-    parameters = dict(api=api, dates=dates, expiry=expiry) | dict(parameters)
 
-    with WebReader(delay=3) as source:
+    with WebReader(delay=3) as alpaca_reader, WebReader(delay=5, authorizer=authorizer) as etrade_reader:
+        sources = {Website.ALPACA: alpaca_reader, Website.ETRADE: etrade_reader}
         symbol_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbols)
-        acquisition_pipeline = acquisition(symbol_dequeuer, *args, source=source, file=file, **arguments, **kwargs)
+        acquisition_pipeline = feed(symbol_dequeuer, *args, website=Website.ETRADE, sources=sources, api=api, **kwargs)
+        acquisition_pipeline = acquisition(acquisition_pipeline, *args, criterions=criterions, priority=priority, liquidity=liquidity, **kwargs)
+        acquisition_pipeline = order(acquisition_pipeline, *args, sources=sources, api=api, **kwargs)
         acquisitions_thread = RoutineThread(acquisition_pipeline, name="AcquisitionThread").setup(**parameters)
         acquisitions_thread.start()
         acquisitions_thread.join()
@@ -124,12 +154,13 @@ if __name__ == "__main__":
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
     with open(API, "r") as apifile:
-        sysAPI = WebAuthorizerAPI(*json.loads(apifile.read())["alpaca"])
+        sysAPI = {Website[str(website).upper()]: WebAuthorizerAPI(*values) for website, values in json.loads(apifile.read()).items()}
     sysDates = DateRange([(Datetime.today() - Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(npv=10))
-    sysParameters = dict(period=252, discount=0.00, fees=0.00, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY, date=Datetime.now().date())
-    main(api=sysAPI, symbols=sysSymbols, dates=sysDates, expiry=sysExpiry, criterions=sysCriterions, parameters=sysParameters)
+    sysParameters = dict(date=Datetime.now().date(), dates=sysDates, expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
+    sysParameters.update({"period": 252, "discount": 0.00, "fees": 0.00})
+    main(symbols=sysSymbols, api=sysAPI, criterions=sysCriterions, parameters=sysParameters)
 
 
 
