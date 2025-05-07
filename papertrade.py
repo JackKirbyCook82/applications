@@ -31,7 +31,7 @@ from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeO
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.history import AlpacaBarsDownloader
 from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionParameters
-from finance.securities import StockCalculator, OptionCalculator
+from finance.pricing import PricingCalculator
 from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -71,10 +71,10 @@ class ETradeStockDownloader(ETradeStockDownloader, Carryover, Processor, signatu
 class ETradeExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
 class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
-class StockCalculator(StockCalculator, Carryover, Processor, signature="stock,technical->stock"): pass
-class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
+class StockPricingCalculator(PricingCalculator, Carryover, Processor, signature="stock->stock", instrument=Variables.Securities.Instrument.STOCK): pass
+class OptionPricingCalculator(PricingCalculator, Carryover, Processor, signature="option->option", instrument=Variables.Securities.Instrument.OPTION): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option->strategy"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option,technical->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
@@ -115,17 +115,16 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Analysis.Technical.STATISTIC])
-        stocks_calculator = StockCalculator(name="StockCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
-        options_calculator = OptionCalculator(name="OptionCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+        stock_pricing_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+        option_pricing_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
         option_filter = OptionFilter(name="OptionFilter", criterion=self.criterions.security)
         strategies_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuations_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
         valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-        pipeline = producer + technicals_calculator + stocks_calculator + options_calculator + option_filter
-        pipeline = pipeline + strategies_calculator + valuations_calculator + valuation_filter
-        return pipeline + acquisitions_calculator + payoffs_calculator
+        pipeline = producer + technicals_calculator + stock_pricing_calculator + option_pricing_calculator + option_filter
+        return pipeline + strategies_calculator + valuations_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
