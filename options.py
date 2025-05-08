@@ -12,9 +12,11 @@ import logging
 import warnings
 import numpy as np
 import xarray as xr
-from abc import ABC
+from abc import ABC, ABCMeta
 from scipy.stats import norm
 from datetime import date as Date
+from datetime import timedelta as Timedelta
+from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -87,8 +89,26 @@ class CallCalculation(OptionCalculation, equation=CallEquation, register=Variabl
 class PutCalculation(OptionCalculation, equation=PutEquation, register=Variables.Securities.Option.PUT): pass
 
 
+class OptionMeta(RegistryMeta, ABCMeta): pass
+class Option(ABC, ntuple("Option", "ticker expire current strike interest dividend volatility"), metaclass=OptionMeta):
+    variables = {"current": "to", "expire": "t", "strike": "k", "interest": "r", "dividend": "q", "volatility": "v"}
+
+    def __new__(cls, *args, ticker, expire, strike, interest, dividend, volatility, **kwargs):
+        assert isinstance(expire, (Date, Timedelta))
+        current = kwargs.get("current", Date.today())
+        expire = current + expire if isinstance(expire, Timedelta) else expire
+        instance = super().__new__(cls, ticker, expire, current, strike, interest, dividend, volatility)
+        for attribute, variable in cls.variables.items(): setattr(cls, variable, property(lambda self: getattr(self, attribute)))
+        return instance
+
+class Call(Option, register=Variables.Securities.Instrument.CALL): pass
+class Put(Option, register=Variables.Securities.Instrument.PUT): pass
+
+
 def main(*args, **kwargs):
-    pass
+    call = Call(ticker="AMD", expire=Timedelta(weeks=52), strike=100, interest=0.00, dividend=0.00, volatility=0.50)
+    calls = call(underlying=np.arange(1, 200, 1), )
+
 
 
 if __name__ == "__main__":
