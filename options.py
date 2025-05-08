@@ -107,8 +107,6 @@ class Put(Option, register=Variables.Securities.Instrument.PUT): pass
 
 def main(*args, **kwargs):
     call = Call(ticker="AMD", expire=Timedelta(weeks=52), strike=100, interest=0.00, dividend=0.00, volatility=0.50)
-    calls = call(underlying=np.arange(1, 200, 1), )
-
 
 
 if __name__ == "__main__":
