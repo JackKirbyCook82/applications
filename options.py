@@ -112,6 +112,7 @@ def main(*args, **kwargs):
     calculation = CallCalculation(*args, **kwargs)
     array = call(current, underlying)
     array = calculation(array)
+    figure = Figure(size=(12, 12), layout=(1, 1), name="Figure")
 
     print(array)
 
