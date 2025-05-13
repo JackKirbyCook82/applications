@@ -15,6 +15,7 @@ import xarray as xr
 from abc import ABC, ABCMeta
 from scipy.stats import norm
 from datetime import date as Date
+from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
@@ -80,8 +81,10 @@ class PutEquation(OptionEquation):
 class OptionCalculation(Calculation, ABC, metaclass=RegistryMeta):
     def execute(self, *args, **kwargs):
         with self.equation(*args, **kwargs) as equation:
-            yield equation.yo()
             yield equation.yτ()
+            yield equation.yo()
+            yield equation.Δ()
+            yield equation.Γ()
             yield equation.t()
             yield equation.s()
             yield equation.k()
@@ -90,31 +93,53 @@ class CallCalculation(OptionCalculation, equation=CallEquation, register=Variabl
 class PutCalculation(OptionCalculation, equation=PutEquation, register=Variables.Securities.Option.PUT): pass
 
 
-class OptionMeta(RegistryMeta, ABCMeta): pass
+class OptionMeta(RegistryMeta, ABCMeta):
+    def __init__(cls, *args, **kwargs):
+        super(OptionMeta, cls).__init__(*args, **kwargs)
+        cls.calculation = kwargs.get("calculation", getattr(cls, "calculation", None))
+
 class Option(Naming, ABC, fields=["ticker", "expire", "strike", "interest", "dividend", "volatility"], metaclass=OptionMeta):
     def __call__(self, current, underlying):
+        calculation = type(self).calculation()
         current = xr.DataArray(current, dims=["current"], coords={"current": current}, name="current")
         underlying = xr.DataArray(underlying, dims=["underlying"], coords={"underlying": underlying}, name="underlying")
         dataset = xr.Dataset({"current": current, "underlying": underlying})
         dataset.update(dict(self))
-        return dataset
+        array = calculation(dataset)
+        return array
 
-class CallOption(Option, register=Variables.Securities.Option.CALL): pass
-class PutOption(Option, register=Variables.Securities.Option.PUT): pass
+class CallOption(Option, calculation=CallCalculation, register=Variables.Securities.Option.CALL): pass
+class PutOption(Option, calculation=PutCalculation, register=Variables.Securities.Option.PUT): pass
 
 
 def main(*args, **kwargs):
     current = Date.today()
-    expire = current + Timedelta(weeks=52)
+    expire = current + Timedelta(weeks=20)
     current = np.arange(current, expire, Timedelta(weeks=1)).astype(np.datetime64)
-    underlying = np.arange(0, 200, 10)[1:]
+    underlying = np.arange(0, 210, 10)[1:]
     call = CallOption(ticker="AMD", expire=expire, strike=100, interest=0.00, dividend=0.00, volatility=0.50)
-    calculation = CallCalculation(*args, **kwargs)
+
     array = call(current, underlying)
-    array = calculation(array)
-    figure = Figure(size=(12, 12), layout=(1, 1), name="Figure")
+    underlying = list(array.underlying.values)
+    current = [value.astype("M8[ms]").astype(Datetime).date() for value in array.current.values]
+    valuation = list(np.linspace(0, np.ceil(np.max(array.valuation.values) + 1), 20))
+    delta = list(np.linspace(0, np.ceil(np.max(array.delta.values) + 1), 20))
+
+    underlying = Coordinate.Independent("x", "underlying", underlying, formatting="${:.0f}", rotation=45, padding=15)
+    current = Coordinate.Independent("y", "current", current, formatting="{:%Y-%m-%d}", rotation=45, padding=25)
+    valuation = Coordinate.Dependent("z", "valuation", valuation, formatting="${:.0f}", rotation=45, padding=2)
+    delta = Coordinate.Dependent("z", "delta", delta, formatting="{:.2f}", rotation=45, padding=2)
+    coords = dict(valuation={"x": underlying, "y": current, "z": valuation}, delta={"x": underlying, "y": current, "z": delta})
+
+    (underlying, current) = np.meshgrid(np.arange(0, len(underlying)), np.arange(0, len(current)))
+    datasets = dict(valuation={"xx": underlying, "yy": current, "zz": array.valuation.values}, delta={"xx": underlying, "yy": current, "zz": array.delta.values})
+
+    figure = Figure(size=(12, 6), layout=(2, 1), name=None)
+    figure[1, 1] = Axes.Axes3D(coords=coords["valuation"], plot=Plot.Surface3D(datasets=datasets["valuation"]), name="valuation")
+    figure[2, 1] = Axes.Axes3D(coords=coords["delta"], plot=Plot.Surface3D(datasets=datasets["delta"]), name="delta")
 
     print(array)
+    figure()
 
 
 if __name__ == "__main__":
