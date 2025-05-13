@@ -124,22 +124,22 @@ def main(*args, **kwargs):
     current = [value.astype("M8[ms]").astype(Datetime).date() for value in array.current.values]
     valuation = list(np.linspace(0, np.ceil(np.max(array.valuation.values) + 1), 20))
     delta = list(np.linspace(0, np.ceil(np.max(array.delta.values) + 1), 20))
+    gamma = list(np.linspace(0, np.ceil(np.max(array.gamma.values) + 1), 20))
 
     underlying = Coordinate.Independent("x", "underlying", underlying, formatting="${:.0f}", rotation=45, padding=15)
     current = Coordinate.Independent("y", "current", current, formatting="{:%Y-%m-%d}", rotation=45, padding=25)
     valuation = Coordinate.Dependent("z", "valuation", valuation, formatting="${:.0f}", rotation=45, padding=2)
     delta = Coordinate.Dependent("z", "delta", delta, formatting="{:.2f}", rotation=45, padding=2)
-    coords = dict(valuation={"x": underlying, "y": current, "z": valuation}, delta={"x": underlying, "y": current, "z": delta})
+    gamma = Coordinate.Dependent("z", "gamma", gamma, formatting="{:.2f}", rotation=45, padding=2)
+    coords = dict(valuation={"x": underlying, "y": current, "z": valuation}, delta={"x": underlying, "y": current, "z": delta}, gamma={"x": underlying, "y": current, "z": gamma})
 
     (underlying, current) = np.meshgrid(np.arange(0, len(underlying)), np.arange(0, len(current)))
-    datasets = dict(valuation={"xx": underlying, "yy": current, "zz": array.valuation.values}, delta={"xx": underlying, "yy": current, "zz": array.delta.values})
+    datasets = dict(valuation={"xx": underlying, "yy": current, "zz": array.valuation.values}, delta={"xx": underlying, "yy": current, "zz": array.delta.values}, gamma={"xx": underlying, "yy": current, "zz": array.gamma.values})
 
-    figure = Figure(size=(12, 6), layout=(2, 1), name=None)
+    figure = Figure(size=(6, 18), layout=(1, 3), name=None)
     figure[1, 1] = Axes.Axes3D(coords=coords["valuation"], plot=Plot.Surface3D(datasets=datasets["valuation"]), name="valuation")
-    figure[2, 1] = Axes.Axes3D(coords=coords["delta"], plot=Plot.Surface3D(datasets=datasets["delta"]), name="delta")
-
-    print(array)
-    figure()
+    figure[1, 2] = Axes.Axes3D(coords=coords["delta"], plot=Plot.Surface3D(datasets=datasets["delta"]), name="delta")
+    figure[1, 3] = Axes.Axes3D(coords=coords["gamma"], plot=Plot.Surface3D(datasets=datasets["gamma"]), name="gamma")
 
 
 if __name__ == "__main__":
