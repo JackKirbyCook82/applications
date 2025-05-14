@@ -33,6 +33,7 @@ from alpaca.history import AlpacaBarsDownloader
 from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionParameters
 from finance.pricing import PricingCalculator
 from finance.technicals import TechnicalCalculator
+from finance.securities import SecurityCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.payoff import PayoffCalculator
@@ -74,7 +75,8 @@ class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="
 class StockPricingCalculator(PricingCalculator, Carryover, Processor, signature="stock->stock", instrument=Variables.Securities.Instrument.STOCK): pass
 class OptionPricingCalculator(PricingCalculator, Carryover, Processor, signature="option->option", instrument=Variables.Securities.Instrument.OPTION): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="stock,option,technical->strategy"): pass
+class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option,technical->option"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
@@ -115,16 +117,17 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Analysis.Technical.STATISTIC])
-        stock_pricing_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
-        option_pricing_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.AGGRESSIVE)
+        stock_pricing_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
+        option_pricing_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
         option_filter = OptionFilter(name="OptionFilter", criterion=self.criterions.security)
+        security_calculator = SecurityCalculator(name="SecurityCalculator")
         strategies_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuations_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
         valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
         pipeline = producer + technicals_calculator + stock_pricing_calculator + option_pricing_calculator + option_filter
-        return pipeline + strategies_calculator + valuations_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
+        return pipeline + security_calculator + strategies_calculator + valuations_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
