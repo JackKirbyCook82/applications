@@ -34,6 +34,7 @@ from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionP
 from finance.pricing import PricingCalculator
 from finance.technicals import TechnicalCalculator
 from finance.securities import SecurityCalculator
+from finance.options import OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.payoff import PayoffCalculator
@@ -72,10 +73,11 @@ class ETradeStockDownloader(ETradeStockDownloader, Carryover, Processor, signatu
 class ETradeExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
 class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
-class StockPricingCalculator(PricingCalculator, Carryover, Processor, signature="stock->stock", instrument=Variables.Securities.Instrument.STOCK): pass
-class OptionPricingCalculator(PricingCalculator, Carryover, Processor, signature="option->option", instrument=Variables.Securities.Instrument.OPTION): pass
+class StockPricingCalculator(PricingCalculator, Carryover, Processor, signature="stock->stock"): pass
+class OptionPricingCalculator(PricingCalculator, Carryover, Processor, signature="option->option"): pass
 class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option,technical->option"): pass
+class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
@@ -117,17 +119,18 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Analysis.Technical.STATISTIC])
-        stock_pricing_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
-        option_pricing_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
+        stockprice_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
+        optionprice_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
         option_filter = OptionFilter(name="OptionFilter", criterion=self.criterions.security)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
+        option_calculator = OptionCalculator(name="OptionCalculator")
         strategies_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuations_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
         valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
-        pipeline = producer + technicals_calculator + stock_pricing_calculator + option_pricing_calculator + option_filter
-        return pipeline + security_calculator + strategies_calculator + valuations_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
+        pipeline = producer + technicals_calculator + stockprice_calculator + optionprice_calculator + option_filter + security_calculator + option_calculator
+        return pipeline + strategies_calculator + valuations_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
