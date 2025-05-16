@@ -124,13 +124,13 @@ class Acquisition(ABC, metaclass=RegistryMeta):
         option_filter = OptionFilter(name="OptionFilter", criterion=self.criterions.security)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         option_calculator = OptionCalculator(name="OptionCalculator")
-        strategies_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
-        valuations_calculator = ValuationCalculator(name="ValuationCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies), analyzing=list(Variables.Analysis))
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator", analyzing=list(Variables.Analysis))
         valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
-        payoffs_calculator = PayoffCalculator(name="PayoffCalculator", valuation=Variables.Valuations.Valuation.ARBITRAGE)
+        payoffs_calculator = PayoffCalculator(name="PayoffCalculator")
         pipeline = producer + technicals_calculator + stockprice_calculator + optionprice_calculator + option_filter + security_calculator + option_calculator
-        return pipeline + strategies_calculator + valuations_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
+        return pipeline + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(npv=10))
     sysParameters = dict(current=Datetime.now().date(), dates=sysDates, expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
-    sysParameters.update({"period": 252, "discount": 0.00, "fees": 0.00})
+    sysParameters.update({"period": 252, "interest": 0.00, "discount": 0.00, "fees": 0.00})
     main(website=Website.ALPACA, symbols=sysSymbols, criterions=sysCriterions, parameters=sysParameters)
 
 
