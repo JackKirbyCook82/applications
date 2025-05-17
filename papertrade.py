@@ -118,7 +118,7 @@ class Acquisition(ABC, metaclass=RegistryMeta):
         return producer + acquisition_saver
 
     def calculator(self, producer, *args, **kwargs):
-        technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Analysis.Technical.STATISTIC])
+        technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
         stockprice_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
         optionprice_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
         option_filter = OptionFilter(name="OptionFilter", criterion=self.criterions.security)
@@ -187,13 +187,13 @@ class SecurityCriterion(Criterion, ABC, fields=["size"]):
     def execute(self, table): return table["size"] >= self["size"]
 
 class ValuationCriterion(Criterion, fields=["npv"]):
-    def execute(self, table): return table[("npv", Variables.Valuations.Scenario.MINIMUM)] >= self["npv"]
+    def execute(self, table): return table[("npv", Variables.Scenario.MINIMUM)] >= self["npv"]
 
 
 def main(*args, website, symbols=[], parameters={}, criterions, **kwargs):
     file = File(repository=REPOSITORY, folder="acquisitions", **dict(AcquisitionParameters))
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
-    priority = lambda series: series[("npv", Variables.Valuations.Scenario.MINIMUM)]
+    priority = lambda series: series[("npv", Variables.Scenario.MINIMUM)]
     liquidity = lambda series: series["size"] * 0.1
     with Acquisition[website](criterions=criterions, priority=priority, liquidity=liquidity) as acquisition:
         pipeline = acquisition(feed=feed, file=file)
@@ -216,7 +216,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(npv=10))
     sysParameters = dict(current=Datetime.now().date(), dates=sysDates, expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
-    sysParameters.update({"period": 252, "interest": 0.00, "discount": 0.00, "fees": 0.00})
+    sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
     main(website=Website.ALPACA, symbols=sysSymbols, criterions=sysCriterions, parameters=sysParameters)
 
 
