@@ -31,10 +31,8 @@ from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeO
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.history import AlpacaBarsDownloader
 from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionParameters
-from finance.pricing import PricingCalculator
 from finance.technicals import TechnicalCalculator
 from finance.securities import SecurityCalculator
-from finance.options import OptionCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.payoff import PayoffCalculator
@@ -73,11 +71,8 @@ class ETradeStockDownloader(ETradeStockDownloader, Carryover, Processor, signatu
 class ETradeExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
 class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
-class StockPricingCalculator(PricingCalculator, Carryover, Processor, signature="stock->stock"): pass
-class OptionPricingCalculator(PricingCalculator, Carryover, Processor, signature="option->option"): pass
-class OptionFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
+class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option,technical->option"): pass
-class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option->option"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
@@ -119,18 +114,14 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
-        stockprice_calculator = StockPricingCalculator(name="StockPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
-        optionprice_calculator = OptionPricingCalculator(name="OptionPricingCalculator", pricing=Variables.Markets.Pricing.MODERATE)
-        option_filter = OptionFilter(name="OptionFilter", criterion=self.criterions.security)
+        security_filter = SecurityFilter(name="SecurityFilter", criterion=self.criterions.security)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
-        option_calculator = OptionCalculator(name="OptionCalculator")
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies), analyzing=list(Variables.Analysis))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator", analyzing=list(Variables.Analysis))
         valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator")
-        pipeline = producer + technicals_calculator + stockprice_calculator + optionprice_calculator + option_filter + security_calculator + option_calculator
-        return pipeline + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
+        return producer + technicals_calculator + security_filter + security_calculator + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
@@ -184,7 +175,7 @@ class AlpacaAcquisition(Acquisition, register=Website.ALPACA):
 
 
 class SecurityCriterion(Criterion, ABC, fields=["size"]):
-    def execute(self, table): return table["size"] >= self["size"]
+    def execute(self, table): return (table["supply"] >= self["size"]) | (table["demand"] >= self["size"])
 
 class ValuationCriterion(Criterion, fields=["npv"]):
     def execute(self, table): return table[("npv", Variables.Scenario.MINIMUM)] >= self["npv"]
