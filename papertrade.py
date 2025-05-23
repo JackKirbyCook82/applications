@@ -114,14 +114,14 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
-        security_filter = SecurityFilter(name="SecurityFilter", criterion=self.criterions.security)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
+        security_filter = SecurityFilter(name="SecurityFilter", criterion=self.criterions.security)
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies), analyzing=list(Variables.Analysis))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator", analyzing=list(Variables.Analysis))
         valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator")
-        return producer + technicals_calculator + security_filter + security_calculator + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
+        return producer + technicals_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
@@ -175,7 +175,7 @@ class AlpacaAcquisition(Acquisition, register=Website.ALPACA):
 
 
 class SecurityCriterion(Criterion, ABC, fields=["size"]):
-    def execute(self, table): return (table["supply"] >= self["size"]) | (table["demand"] >= self["size"])
+    def execute(self, table): return table["size"] >= self["size"]
 
 class ValuationCriterion(Criterion, fields=["npv"]):
     def execute(self, table): return table[("npv", Variables.Scenario.MINIMUM)] >= self["npv"]
