@@ -35,6 +35,7 @@ from finance.securities import StockCalculator, OptionCalculator, SecurityCalcul
 from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
+from finance.greeks import GreekCalculator
 from finance.payoff import PayoffCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader, WebAuthorizer
@@ -74,8 +75,8 @@ class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signa
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
 class StockCalculator(StockCalculator, Carryover, Processor, signature="stock,technical->stock"): pass
 class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option,stock->option"): pass
+class GreekCalculator(GreekCalculator, Carryover, Processor, signature="option->option"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="option->security"): pass
-
 class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
@@ -121,6 +122,7 @@ class Acquisition(ABC, metaclass=RegistryMeta):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
         stock_calculator = StockCalculator(name="StockCalculator", pricing=self.pricings.stock)
         option_calculator = OptionCalculator(name="OptionCalculator", pricing=self.pricings.option)
+        greek_calculator = GreekCalculator(name="GreekCalculator")
         security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=self.pricings.security)
         security_filter = SecurityFilter(name="SecurityFilter", criteria=self.criterions.security)
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
@@ -128,7 +130,7 @@ class Acquisition(ABC, metaclass=RegistryMeta):
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator")
-        pipeline = producer + technicals_calculator + stock_calculator + option_calculator + security_calculator + security_filter
+        pipeline = producer + technicals_calculator + stock_calculator + option_calculator + greek_calculator + security_calculator + security_filter
         return pipeline + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
