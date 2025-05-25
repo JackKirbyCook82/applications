@@ -31,8 +31,8 @@ from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeO
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.history import AlpacaBarsDownloader
 from finance.market import AcquisitionCalculator, AcquisitionSaver, AcquisitionParameters
+from finance.securities import StockCalculator, OptionCalculator, SecurityCalculator
 from finance.technicals import TechnicalCalculator
-from finance.securities import SecurityCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.payoff import PayoffCalculator
@@ -40,10 +40,10 @@ from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebAuthorizerAPI, WebReader, WebAuthorizer
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.synchronize import RoutineThread
-from support.filters import Filter, Criterion
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.meta import RegistryMeta
+from support.filters import Filter
 from support.files import File
 
 
@@ -56,6 +56,7 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 Criterions = ntuple("Criterions", "security valuation")
+Pricings = ntuple("Pricings", "stock option security")
 authorize = "https://us.etrade.com/e/t/etws/authorize?key={}&token={}"
 request = "https://api.etrade.com/oauth/request_token"
 access = "https://api.etrade.com/oauth/access_token"
@@ -71,18 +72,21 @@ class ETradeStockDownloader(ETradeStockDownloader, Carryover, Processor, signatu
 class ETradeExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
 class ETradeOptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="technical->technical"): pass
-class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option,technical->option"): pass
-class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="option->strategy"): pass
+class StockCalculator(StockCalculator, Carryover, Processor, signature="stock,technical->stock"): pass
+class OptionCalculator(OptionCalculator, Carryover, Processor, signature="option,stock->option"): pass
+class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="option->security"): pass
+
+class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,option->acquisition"): pass
+class AcquisitionCalculator(AcquisitionCalculator, Carryover, Processor, signature="valuation,security->acquisition"): pass
 class PayoffCalculator(PayoffCalculator, Carryover, Processor, signature="acquisition->acquisition"): pass
 class AcquisitionSaver(AcquisitionSaver, Carryover, Consumer, signature="acquisition->"): pass
 
 
 class Acquisition(ABC, metaclass=RegistryMeta):
-    def __init__(self, *args, criterions, priority, liquidity, **kwargs):
+    def __init__(self, *args, criterions, pricings, priority, liquidity, **kwargs):
         with open(API, "r") as apifile:
             api = json.loads(apifile.read()).items()
             api = {Website[str(website).upper()]: WebAuthorizerAPI(*values) for website, values in api}
@@ -91,6 +95,7 @@ class Acquisition(ABC, metaclass=RegistryMeta):
         alpaca = WebReader(delay=3, authorizer=None)
         sources = {Website.ETRADE: etrade, Website.ALPACA: alpaca}
         self.__criterions = criterions
+        self.__pricings = pricings
         self.__liquidity = liquidity
         self.__priority = priority
         self.__sources = sources
@@ -114,14 +119,17 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
-        security_calculator = SecurityCalculator(name="SecurityCalculator")
-        security_filter = SecurityFilter(name="SecurityFilter", criterion=self.criterions.security)
-        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies), analyzing=list(Variables.Analysis))
-        valuation_calculator = ValuationCalculator(name="ValuationCalculator", analyzing=list(Variables.Analysis))
-        valuation_filter = ValuationFilter(name="ValuationFilter", criterion=self.criterions.valuation)
+        stock_calculator = StockCalculator(name="StockCalculator", pricing=self.pricings.stock)
+        option_calculator = OptionCalculator(name="OptionCalculator", pricing=self.pricings.option)
+        security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=self.pricings.security)
+        security_filter = SecurityFilter(name="SecurityFilter", criteria=self.criterions.security)
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
+        valuation_filter = ValuationFilter(name="ValuationFilter", criteria=self.criterions.valuation)
         acquisitions_calculator = AcquisitionCalculator(name="AcquisitionCalculator", priority=self.priority, liquidity=self.liquidity)
         payoffs_calculator = PayoffCalculator(name="PayoffCalculator")
-        return producer + technicals_calculator + security_calculator + security_filter + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
+        pipeline = producer + technicals_calculator + stock_calculator + option_calculator + security_calculator + security_filter
+        return pipeline + strategy_calculator + valuation_calculator + valuation_filter + acquisitions_calculator + payoffs_calculator
 
     @abstractmethod
     def downloader(self, producer, *args, **kwargs): pass
@@ -132,6 +140,8 @@ class Acquisition(ABC, metaclass=RegistryMeta):
 
     @property
     def criterions(self): return self.__criterions
+    @property
+    def pricings(self): return self.__pricings
     @property
     def liquidity(self): return self.__liquidity
     @property
@@ -174,19 +184,19 @@ class AlpacaAcquisition(Acquisition, register=Website.ALPACA):
         self.sources[Website.ALPACA].stop()
 
 
-class SecurityCriterion(Criterion, ABC, fields=["size"]):
-    def execute(self, table): return table["size"] >= self["size"]
-
-class ValuationCriterion(Criterion, fields=["npv"]):
-    def execute(self, table): return table[("npv", Variables.Scenario.MINIMUM)] >= self["npv"]
-
-
-def main(*args, website, symbols=[], parameters={}, criterions, **kwargs):
+def main(*args, website, symbols=[], parameters={}, **kwargs):
     file = File(repository=REPOSITORY, folder="acquisitions", **dict(AcquisitionParameters))
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
+
+    pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     priority = lambda series: series[("npv", Variables.Scenario.MINIMUM)]
     liquidity = lambda series: series["size"] * 0.1
-    with Acquisition[website](criterions=criterions, priority=priority, liquidity=liquidity) as acquisition:
+    valuation = lambda table: table[("npv", Variables.Scenario.MINIMUM)] >= 10
+    security = lambda table: table["size"] >= 10
+    pricings = Pricings(pricing, pricing, lambda series: series["price"])
+    criterions = Criterions(security, valuation)
+
+    with Acquisition[website](priority=priority, liquidity=liquidity, criterions=criterions, pricings=pricings) as acquisition:
         pipeline = acquisition(feed=feed, file=file)
         thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
         thread.start()
@@ -205,10 +215,9 @@ if __name__ == "__main__":
         random.shuffle(sysSymbols)
     sysDates = DateRange([(Datetime.today() - Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysCriterions = Criterions(SecurityCriterion(size=10), ValuationCriterion(npv=10))
     sysParameters = dict(current=Datetime.now().date(), dates=sysDates, expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(website=Website.ALPACA, symbols=sysSymbols, criterions=sysCriterions, parameters=sysParameters)
+    main(website=Website.ALPACA, symbols=sysSymbols, parameters=sysParameters)
 
 
 
