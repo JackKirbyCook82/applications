@@ -30,6 +30,7 @@ API = os.path.join(RESOURCES, "api.txt")
 from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.history import AlpacaBarsDownloader
+from alpaca.orders import AlpacaOrderUploader
 from finance.securities import StockCalculator, OptionCalculator, SecurityCalculator
 from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
@@ -44,7 +45,6 @@ from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.meta import RegistryMeta
 from support.filters import Filter
-from support.files import File
 
 
 __version__ = "1.0.0"
@@ -80,7 +80,8 @@ class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, sign
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->acquisition"): pass
+class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
+class AlpacaOrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
 class Acquisition(ABC, metaclass=RegistryMeta):
@@ -109,10 +110,11 @@ class Acquisition(ABC, metaclass=RegistryMeta):
     def __call__(self, *args, feed, **kwargs):
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=self.sources[Website.ALPACA], api=self.api[Website.ALPACA])
+        order_uploader = AlpacaOrderUploader(name="OrderUploader", source=self.sources[Website.ALPACA], api=self.api[Website.ALPACA])
         producer = symbols_dequeuer + bars_downloader
         producer = self.downloader(producer, *args, **kwargs)
         producer = self.calculator(producer, *args, **kwargs)
-        return producer
+        return producer + order_uploader
 
     def calculator(self, producer, *args, **kwargs):
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
