@@ -48,7 +48,6 @@ from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.filters import Filter
 
-
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = []
@@ -61,7 +60,6 @@ Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 Authorize = ntuple("Authorize", "username password")
 WebAPI = ntuple("WebAPI", "identity code")
-
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
 class AlpacaBarsDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="symbol->technical"): pass
