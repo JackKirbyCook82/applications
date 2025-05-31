@@ -14,7 +14,6 @@ import logging
 import warnings
 import pandas as pd
 from enum import Enum
-from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
@@ -30,6 +29,7 @@ AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
+from etrade.service import ETradeWebService
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader, AlpacaContractDownloader
 from alpaca.history import AlpacaBarsDownloader
 from alpaca.orders import AlpacaOrderUploader
@@ -42,10 +42,10 @@ from finance.market import MarketCalculator
 from finance.variables import Variables, Querys, Strategies
 from webscraping.webreaders import WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
+from support.decorators import ValueDispatcher
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
-from support.meta import RegistryMeta
 from support.filters import Filter
 
 
@@ -84,111 +84,63 @@ class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuat
 class AlpacaOrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
-class Acquisition(ABC, metaclass=RegistryMeta):
-    def __init_subclass__(cls, *args, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-        cls.website = kwargs.get("register", getattr(cls, "website", None))
+@ValueDispatcher(locator="website")
+def papertrade(*args, website, **kwargs): raise ValueError(website)
 
-    def __init__(self, *args, webapi, criterions, pricings, priority, liquidity, **kwargs):
-        website = type(self).website
-        self.__webapi = webapi[website]
-        self.__criterions = criterions
-        self.__pricings = pricings
-        self.__liquidity = liquidity
-        self.__priority = priority
-
-#        authorizer = WebAuthorizer(api=api[Website.ETRADE], base=base, access=access, request=request, authorize=authorize)
-#        etrade = WebReader(delay=5, authorizer=authorizer)
-#        alpaca = WebReader(delay=3, authorizer=None)
-#        sources = {Website.ETRADE: etrade, Website.ALPACA: alpaca}
-#        self.__sources = sources
-
-    def __enter__(self):
-        self.start()
-        return self
-
-    def __exit__(self, error_type, error_value, error_traceback):
-        self.stop()
-
-#    def __call__(self, *args, feed, **kwargs):
-#        symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
-#        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=self.sources[Website.ALPACA], api=self.api[Website.ALPACA])
-#        order_uploader = AlpacaOrderUploader(name="OrderUploader", source=self.sources[Website.ALPACA], api=self.api[Website.ALPACA])
-#        producer = symbols_dequeuer + bars_downloader
-#        producer = self.downloader(producer, *args, **kwargs)
-#        producer = self.calculator(producer, *args, **kwargs)
-#        return producer + order_uploader
-
-    def calculator(self, producer, *args, **kwargs):
+@papertrade.register(Website.ALPACA)
+def alpaca(*args, webapi, feed, pricings, criterions, priority, liquidity, parameters={}, **kwargs):
+    with WebReader(delay=5) as source:
+        symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, api=webapi[Website.ALPACA])
+        stocks_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, api=webapi[Website.ALPACA])
+        contracts_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, api=webapi[Website.ALPACA])
+        options_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, api=webapi[Website.ALPACA])
         technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
-        stock_calculator = StockCalculator(name="StockCalculator", pricing=self.pricings.stock)
-        option_calculator = OptionCalculator(name="OptionCalculator", pricing=self.pricings.option)
+        stock_calculator = StockCalculator(name="StockCalculator", pricing=pricings.stock)
+        option_calculator = OptionCalculator(name="OptionCalculator", pricing=pricings.option)
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=self.pricings.security)
-        security_filter = SecurityFilter(name="SecurityFilter", criteria=self.criterions.security)
+        security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=pricings.security)
+        security_filter = SecurityFilter(name="SecurityFilter", criteria=criterions.security)
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
-        valuation_filter = ValuationFilter(name="ValuationFilter", criteria=self.criterions.valuation)
-        market_calculator = MarketCalculator(name="MarketCalculator", priority=self.priority, liquidity=self.liquidity)
-        pipeline = producer + technicals_calculator + stock_calculator + option_calculator + greek_calculator + security_calculator + security_filter
-        return pipeline + strategy_calculator + valuation_calculator + valuation_filter + market_calculator
+        valuation_filter = ValuationFilter(name="ValuationFilter", criteria=criterions.valuation)
+        market_calculator = MarketCalculator(name="MarketCalculator", priority=priority, liquidity=liquidity)
+        order_uploader = AlpacaOrderUploader(name="OrderUploader", source=source, api=webapi[Website.ALPACA])
+        pipeline = symbols_dequeuer + bars_downloader + stocks_downloader + contracts_downloader + options_downloader
+        pipeline = pipeline + technicals_calculator + stock_calculator + option_calculator + greek_calculator + security_calculator + security_filter
+        pipeline = pipeline + strategy_calculator + valuation_calculator + valuation_filter + market_calculator + order_uploader
+        thread = RoutineThread(pipeline, name="PaperTradeThread").setup(**parameters)
+        thread.start()
+        thread.join()
 
-    @abstractmethod
-    def downloader(self, producer, *args, **kwargs): pass
-    @abstractmethod
-    def start(self, *args, **kwargs): pass
-    @abstractmethod
-    def stop(self, *args, **kwargs): pass
+@papertrade.register(Website.ETRADE)
+def etrade(*args, authorize, webapi, feed, pricings, criterions, priority, liquidity, parameters={}, **kwargs):
+    with ETradeWebService(delay=10, timeout=60, webapi=webapi[Website.ETRADE], executable=DRIVER, authorize=authorize[Website.ETRADE]) as primary, WebReader(delay=2) as secondary:
+        source = ntuple("Source", "etrade alpaca")(primary, secondary)
+        symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source.alpaca, api=webapi[Website.ALPACA])
+        stocks_downloader = ETradeStockDownloader(name="StockDownloader", source=source.etrade, api=webapi[Website.ETRADE])
+        expires_downloader = ETradeExpireDownloader(name="ExpireDownloader", source=source.etrade, api=webapi[Website.ETRADE])
+        options_downloader = ETradeOptionDownloader(name="OptionDownloader", source=source.etrade, api=webapi[Website.ETRADE])
+        technicals_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
+        stock_calculator = StockCalculator(name="StockCalculator", pricing=pricings.stock)
+        option_calculator = OptionCalculator(name="OptionCalculator", pricing=pricings.option)
+        greek_calculator = GreekCalculator(name="GreekCalculator")
+        security_calculator = SecurityCalculator(name="SecurityCalculator", pricing=pricings.security)
+        security_filter = SecurityFilter(name="SecurityFilter", criteria=criterions.security)
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
+        valuation_filter = ValuationFilter(name="ValuationFilter", criteria=criterions.valuation)
+        market_calculator = MarketCalculator(name="MarketCalculator", priority=priority, liquidity=liquidity)
+        order_uploader = AlpacaOrderUploader(name="OrderUploader", source=source.alpaca, api=webapi[Website.ALPACA])
+        pipeline = symbols_dequeuer + bars_downloader + stocks_downloader + expires_downloader + options_downloader
+        pipeline = pipeline + technicals_calculator + stock_calculator + option_calculator + greek_calculator + security_calculator + security_filter
+        pipeline = pipeline + strategy_calculator + valuation_calculator + valuation_filter + market_calculator + order_uploader
+        thread = RoutineThread(pipeline, name="PaperTradeThread").setup(**parameters)
+        thread.start()
+        thread.join()
 
-    @property
-    def criterions(self): return self.__criterions
-    @property
-    def pricings(self): return self.__pricings
-    @property
-    def liquidity(self): return self.__liquidity
-    @property
-    def priority(self): return self.__priority
-    @property
-    def webapi(self): return self.__webapi
-
-
-class ETradeAcquisition(Acquisition, register=Website.ETRADE):
-    pass
-
-#    def downloader(self, producer, *args, **kwargs):
-#        parameters = dict(source=self.sources[Website.ETRADE])
-#        stocks_downloader = ETradeStockDownloader(name="StockDownloader", **parameters)
-#        expires_downloader = ETradeExpireDownloader(name="ExpireDownloader", **parameters)
-#        options_downloader = ETradeOptionDownloader(name="OptionDownloader", **parameters)
-#        return producer + stocks_downloader + expires_downloader + options_downloader
-
-#    def start(self):
-#        self.sources[Website.ALPACA].start()
-#        self.sources[Website.ETRADE].start()
-
-#    def stop(self):
-#        self.sources[Website.ALPACA].stop()
-#        self.sources[Website.ETRADE].stop()
-
-
-class AlpacaAcquisition(Acquisition, register=Website.ALPACA):
-    pass
-
-#    def downloader(self, producer, *args, **kwargs):
-#        parameters = dict(source=self.sources[Website.ALPACA], api=self.api[Website.ALPACA])
-#        stocks_downloader = AlpacaStockDownloader(name="StockDownloader", **parameters)
-#        contracts_downloader = AlpacaContractDownloader(name="ContractDownloader", **parameters)
-#        options_downloader = AlpacaOptionDownloader(name="OptionDownloader", **parameters)
-#        return producer + stocks_downloader + contracts_downloader + options_downloader
-
-#    def start(self):
-#        self.sources[Website.ALPACA].start()
-
-#    def stop(self):
-#        self.sources[Website.ALPACA].stop()
-
-
-def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
+def main(*args, website, webapi, authorize, symbols=[], parameters={}, **kwargs):
     feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     priority = lambda series: series[("npv", Variables.Scenario.MINIMUM)]
@@ -197,11 +149,8 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
     security = lambda table: table["size"] >= 10
     pricings = Pricings(pricing, pricing, lambda series: series["price"])
     criterions = Criterions(security, valuation)
-    with Acquisition(webapi=webapi, authorize=authorize, priority=priority, liquidity=liquidity, criterions=criterions, pricings=pricings) as acquisition:
-        pipeline = acquisition(feed=feed)
-        thread = RoutineThread(pipeline, name="AcquisitionThread").setup(**parameters)
-        thread.start()
-        thread.join()
+    keywords = dict(webapi=webapi, authorize=authorize, feed=feed, priority=priority, liquidity=liquidity, pricings=pricings, criterions=criterions)
+    papertrade(*args, website=website, parameters=parameters, **keywords, **kwargs)
 
 
 if __name__ == "__main__":
@@ -215,7 +164,7 @@ if __name__ == "__main__":
         sysWebAPI = {Website[str(website).upper()]: WebAPI(*values) for website, values in sysWebAPI}
     with open(AUTHORIZE, "r") as authfile:
         sysAuthorize = json.loads(authfile.read()).items()
-        sysAuthorize = {Website[str(website).upper()]: WebAPI(*values) for website, values in sysAuthorize}
+        sysAuthorize = {Website[str(website).upper()]: Authorize(*values) for website, values in sysAuthorize}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
@@ -224,7 +173,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), dates=sysDates, expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
+    main(website=Website.ETRADE, webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
 
 
 
