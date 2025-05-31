@@ -115,7 +115,7 @@ def alpaca(*args, webapi, feed, pricings, criterions, priority, liquidity, param
 
 @papertrade.register(Website.ETRADE)
 def etrade(*args, authorize, webapi, feed, pricings, criterions, priority, liquidity, parameters={}, **kwargs):
-    with ETradeWebService(delay=10, timeout=60, webapi=webapi[Website.ETRADE], executable=DRIVER, authorize=authorize[Website.ETRADE]) as primary, WebReader(delay=2) as secondary:
+    with ETradeWebService(delay=10, timeout=60, webapi=webapi[Website.ETRADE], executable=DRIVER, authorize=authorize[Website.ETRADE]) as primary, WebReader(delay=5) as secondary:
         source = ntuple("Source", "etrade alpaca")(primary, secondary)
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=feed)
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source.alpaca, api=webapi[Website.ALPACA])
