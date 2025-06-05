@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   PaperTrading
+@name:   TestTrading
 @author: Jack Kirby Cook
 
 """
@@ -24,12 +24,10 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-DRIVER = os.path.join(RESOURCES, "chromedriver.exe")
 AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
-from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
-from etrade.service import ETradeService
+from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
@@ -58,9 +56,9 @@ Pricings = ntuple("Pricings", "stock option security")
 
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
-class StockDownloader(ETradeStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
-class ExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
-class OptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
+class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
+class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
+class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stock->stock"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
@@ -72,7 +70,7 @@ class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuat
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
-def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
+def main(*args, webapi, symbols=[], parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
@@ -82,13 +80,12 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    etrade_parameters = dict(executable=DRIVER, delay=10, timeout=60, api=webapi[Website.ETRADE], authorize=authorize[Website.ETRADE])
     alpaca_parameters = dict(delay=10, api=webapi[Website.ALPACA])
-    with ETradeService(**etrade_parameters) as etrade_source, WebReader(**alpaca_parameters) as alpaca_source:
+    with WebReader(**alpaca_parameters) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source, api=webapi[Website.ETRADE])
-        expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, api=webapi[Website.ETRADE])
-        options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source, api=webapi[Website.ETRADE])
+        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
+        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
+        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
@@ -98,11 +95,11 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
         order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=webapi[Website.ALPACA])
-        algotrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
+        algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
         algotrade_pipeline = algotrade_pipeline + market_calculator + order_uploader
-        thread = RoutineThread(algotrade_pipeline, name="PaperTradeThread").setup(**parameters)
+        thread = RoutineThread(algotrade_pipeline, name="TestTradeThread").setup(**parameters)
         thread.start()
         thread.join()
 

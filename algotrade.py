@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Feb 15 2025
-@name:   PaperTrading
+Created on Sun Jun 1 2025
+@name:   AlgoTrading
 @author: Jack Kirby Cook
 
 """
@@ -29,14 +29,13 @@ AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
+from etrade.orders import ETradeOrderUploader
 from etrade.service import ETradeService
-from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.market import MarketCalculator
 from finance.variables import Variables, Querys, Strategies
-from webscraping.webreaders import WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
@@ -69,7 +68,7 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="se
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
-class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
+class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
 def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
@@ -83,8 +82,7 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
     strategy_selection = list(Strategies)
 
     etrade_parameters = dict(executable=DRIVER, delay=10, timeout=60, api=webapi[Website.ETRADE], authorize=authorize[Website.ETRADE])
-    alpaca_parameters = dict(delay=10, api=webapi[Website.ALPACA])
-    with ETradeService(**etrade_parameters) as etrade_source, WebReader(**alpaca_parameters) as alpaca_source:
+    with ETradeService(**etrade_parameters) as etrade_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source, api=webapi[Website.ETRADE])
         expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, api=webapi[Website.ETRADE])
@@ -97,12 +95,12 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=webapi[Website.ALPACA])
+        order_uploader = OrderUploader(name="OrderUploader", source=etrade_source, api=webapi[Website.ETRADE])
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
         algotrade_pipeline = algotrade_pipeline + market_calculator + order_uploader
-        thread = RoutineThread(algotrade_pipeline, name="PaperTradeThread").setup(**parameters)
+        thread = RoutineThread(algotrade_pipeline, name="AlgoTradeThread").setup(**parameters)
         thread.start()
         thread.join()
 
@@ -126,7 +124,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(website=Website.ETRADE, webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
+    main(webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
 
 
 
