@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   PaperTrading
+@name:   TestTrade, Alpaca Market, ETrade Order
 @author: Jack Kirby Cook
 
 """
@@ -28,9 +28,8 @@ DRIVER = os.path.join(RESOURCES, "chromedriver.exe")
 AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
-from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
-from alpaca.orders import AlpacaOrderUploader
-from etrade.service import ETradeServiceReader
+from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from etrade.orders import ETradeOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -58,9 +57,9 @@ Pricings = ntuple("Pricings", "stock option security")
 
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
-class StockDownloader(ETradeStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
-class ExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="symbol->expire"): pass
-class OptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="symbol,expire->option"): pass
+class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
+class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
+class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stock->stock"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
@@ -69,7 +68,7 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="se
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
 class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
-class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
+class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
 def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
@@ -82,13 +81,12 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    etrade_parameters = dict(executable=DRIVER, delay=3, timeout=60, api=webapi[Website.ETRADE], authorize=authorize[Website.ETRADE])
     alpaca_parameters = dict(delay=3, api=webapi[Website.ALPACA])
-    with ETradeServiceReader(**etrade_parameters) as etrade_source, WebReader(**alpaca_parameters) as alpaca_source:
+    with WebReader(**alpaca_parameters) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source, api=webapi[Website.ETRADE])
-        expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, api=webapi[Website.ETRADE])
-        options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source, api=webapi[Website.ETRADE])
+        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
+        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
+        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
@@ -97,12 +95,12 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=webapi[Website.ALPACA])
-        algotrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
+        order_uploader = OrderUploader(name="OrderUploader", source=None, api=webapi[Website.ALPACA])
+        algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
         algotrade_pipeline = algotrade_pipeline + market_calculator + order_uploader
-        thread = RoutineThread(algotrade_pipeline, name="PaperTradeThread").setup(**parameters)
+        thread = RoutineThread(algotrade_pipeline, name="TestTradeThread").setup(**parameters)
         thread.start()
         thread.join()
 
@@ -127,6 +125,5 @@ if __name__ == "__main__":
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
     main(website=Website.ETRADE, webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
-
 
 

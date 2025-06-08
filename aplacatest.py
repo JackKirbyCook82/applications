@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   TestTrading
+@name:   TestTrade, Alpaca Market, Alpaca Order
 @author: Jack Kirby Cook
 
 """
