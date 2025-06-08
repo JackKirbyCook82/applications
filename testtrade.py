@@ -80,7 +80,7 @@ def main(*args, webapi, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    alpaca_parameters = dict(delay=10, api=webapi[Website.ALPACA])
+    alpaca_parameters = dict(delay=3, api=webapi[Website.ALPACA])
     with WebReader(**alpaca_parameters) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=webapi[Website.ALPACA])

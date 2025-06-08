@@ -29,7 +29,7 @@ AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
-from etrade.service import ETradeService
+from etrade.service import ETradeServiceReader
 from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
@@ -82,9 +82,9 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    etrade_parameters = dict(executable=DRIVER, delay=10, timeout=60, api=webapi[Website.ETRADE], authorize=authorize[Website.ETRADE])
-    alpaca_parameters = dict(delay=10, api=webapi[Website.ALPACA])
-    with ETradeService(**etrade_parameters) as etrade_source, WebReader(**alpaca_parameters) as alpaca_source:
+    etrade_parameters = dict(executable=DRIVER, delay=3, timeout=60, api=webapi[Website.ETRADE], authorize=authorize[Website.ETRADE])
+    alpaca_parameters = dict(delay=3, api=webapi[Website.ALPACA])
+    with ETradeServiceReader(**etrade_parameters) as etrade_source, WebReader(**alpaca_parameters) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source, api=webapi[Website.ETRADE])
         expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, api=webapi[Website.ETRADE])
