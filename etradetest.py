@@ -51,7 +51,7 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 WebAPI = ntuple("WebAPI", "identity code")
-Authorize = ntuple("Authorize", "username password")
+Authorize = ntuple("Authorize", "account username password")
 Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 

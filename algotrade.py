@@ -51,7 +51,7 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 WebAPI = ntuple("WebAPI", "identity code")
-Authorize = ntuple("Authorize", "username password")
+Authorize = ntuple("Authorize", "account username password")
 Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 
@@ -95,7 +95,7 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=etrade_source, api=webapi[Website.ETRADE])
+        order_uploader = OrderUploader(name="OrderUploader", source=etrade_source, authroize=authorize[Website.ETRADE])
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
