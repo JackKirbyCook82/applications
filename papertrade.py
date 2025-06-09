@@ -30,7 +30,7 @@ WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
 from alpaca.orders import AlpacaOrderUploader
-from etrade.service import ETradeServiceReader
+from etrade.service import ETradePromptService
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -42,6 +42,7 @@ from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.filters import Filter
+from support.mixins import Delayer
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -52,7 +53,7 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 WebAPI = ntuple("WebAPI", "identity code")
-Authorize = ntuple("Authorize", "account username password")
+Authorize = ntuple("Authorize", "username password")
 Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 
@@ -82,13 +83,18 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    etrade_parameters = dict(executable=DRIVER, delay=3, timeout=60, api=webapi[Website.ETRADE], authorize=authorize[Website.ETRADE])
-    alpaca_parameters = dict(delay=3, api=webapi[Website.ALPACA])
-    with ETradeServiceReader(**etrade_parameters) as etrade_source, WebReader(**alpaca_parameters) as alpaca_source:
+    alpaca_delayer = Delayer(3)
+    alpaca_webapi = webapi[Website.ALPACA]
+    etrade_delayer = Delayer(3)
+    etrade_webapi = webapi[Website.ETRADE]
+    etrade_authorize = authorize[Website.ETRADE]
+    etrade_service = ETradePromptService(delayer=etrade_delayer, authorize=etrade_authorize, api=etrade_webapi)
+
+    with WebReader(delayer=etrade_delayer, service=etrade_service) as etrade_source, WebReader(delayer=alpaca_delayer) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source, api=webapi[Website.ETRADE])
-        expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, api=webapi[Website.ETRADE])
-        options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source, api=webapi[Website.ETRADE])
+        stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source)
+        expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source)
+        options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
@@ -97,7 +103,7 @@ def main(*args, webapi, authorize, symbols=[], parameters={}, **kwargs):
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=webapi[Website.ALPACA])
+        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=alpaca_webapi)
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
@@ -126,7 +132,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(website=Website.ETRADE, webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
+    main(webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
 
 
 

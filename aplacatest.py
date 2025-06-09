@@ -24,7 +24,6 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
@@ -40,6 +39,7 @@ from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
 from support.filters import Filter
+from support.mixins import Delayer
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -50,7 +50,6 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 WebAPI = ntuple("WebAPI", "identity code")
-Authorize = ntuple("Authorize", "username password")
 Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 
@@ -80,12 +79,14 @@ def main(*args, webapi, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    alpaca_parameters = dict(delay=3, api=webapi[Website.ALPACA])
-    with WebReader(**alpaca_parameters) as alpaca_source:
+    alpaca_webapi = webapi[Website.ALPACA]
+    alpaca_delayer = Delayer(3)
+
+    with WebReader(delayer=alpaca_delayer) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
-        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
-        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, api=webapi[Website.ALPACA])
+        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=alpaca_webapi)
+        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, api=alpaca_webapi)
+        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, api=alpaca_webapi)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
@@ -94,7 +95,7 @@ def main(*args, webapi, symbols=[], parameters={}, **kwargs):
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=webapi[Website.ALPACA])
+        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=alpaca_webapi)
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
@@ -113,9 +114,6 @@ if __name__ == "__main__":
     with open(WEBAPI, "r") as apifile:
         sysWebAPI = json.loads(apifile.read()).items()
         sysWebAPI = {Website[str(website).upper()]: WebAPI(*values) for website, values in sysWebAPI}
-    with open(AUTHORIZE, "r") as authfile:
-        sysAuthorize = json.loads(authfile.read()).items()
-        sysAuthorize = {Website[str(website).upper()]: Authorize(*values) for website, values in sysAuthorize}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
@@ -123,7 +121,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(website=Website.ETRADE, webapi=sysWebAPI, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
+    main(webapi=sysWebAPI, symbols=sysSymbols, parameters=sysParameters)
 
 
 
