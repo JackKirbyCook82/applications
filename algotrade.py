@@ -24,10 +24,8 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-DRIVER = os.path.join(RESOURCES, "chromedriver.exe")
-AUTHORIZE = os.path.join(RESOURCES, "authorize.txt")
 ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
-WEBAPI = os.path.join(RESOURCES, "webapi.txt")
+DRIVER = os.path.join(RESOURCES, "chromedriver.exe")
 
 from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
 from etrade.orders import ETradeOrderUploader
@@ -52,9 +50,6 @@ __license__ = "MIT License"
 
 
 Website = Enum("WebSite", "ALPACA ETRADE")
-WebAPI = ntuple("WebAPI", "identity code")
-Authorize = ntuple("Authorize", "username password")
-Account = ntuple("Account", "number keycode")
 Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 
@@ -74,7 +69,7 @@ class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuat
 class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
-def main(*args, webapi, accounts, authorize, symbols=[], parameters={}, **kwargs):
+def main(*args, accounts, symbols=[], parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
@@ -85,9 +80,6 @@ def main(*args, webapi, accounts, authorize, symbols=[], parameters={}, **kwargs
     strategy_selection = list(Strategies)
 
     etrade_delayer = Delayer(3)
-    etrade_webapi = webapi[Website.ETRADE]
-    etrade_account = accounts[Website.ETRADE]
-    etrade_authorize = authorize[Website.ETRADE]
     etrade_service = ETradePromptService(delayer=etrade_delayer, authorize=etrade_authorize, api=etrade_webapi)
 
     with ETradePromptService(delayer=etrade_delayer, service=etrade_service) as etrade_source:
@@ -119,15 +111,9 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    with open(WEBAPI, "r") as apifile:
-        sysWebAPI = json.loads(apifile.read()).items()
-        sysWebAPI = {Website[str(website).upper()]: WebAPI(*values) for website, values in sysWebAPI}
-    with open(AUTHORIZE, "r") as authfile:
-        sysAuthorize = json.loads(authfile.read()).items()
-        sysAuthorize = {Website[str(website).upper()]: Authorize(*values) for website, values in sysAuthorize}
-    with open(ACCOUNTS, "r") as actfile:
-        sysAccounts = json.loads(actfile.read()).items()
-        sysAccounts = {Website[str(website).upper()]: Account(*values) for website, values in sysAccounts}
+    function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
+    sysAccounts = pd.read_csv(ACCOUNTS, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
+    sysAccounts = {website: function(contents) for website, contents in sysAccounts.to_dict("index").items()}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
@@ -135,7 +121,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(webapi=sysWebAPI, accounts=sysAccounts, authorize=sysAuthorize, symbols=sysSymbols, parameters=sysParameters)
+    main(accounts=sysAccounts, symbols=sysSymbols, parameters=sysParameters)
 
 
 

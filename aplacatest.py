@@ -8,7 +8,6 @@ Created on Sat Feb 15 2025
 
 import os
 import sys
-import json
 import random
 import logging
 import warnings
@@ -24,7 +23,7 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-WEBAPI = os.path.join(RESOURCES, "webapi.txt")
+ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.orders import AlpacaOrderUploader
@@ -49,7 +48,6 @@ __license__ = "MIT License"
 
 
 Website = Enum("WebSite", "ALPACA ETRADE")
-WebAPI = ntuple("WebAPI", "identity code")
 Criterions = ntuple("Criterions", "security valuation")
 Pricings = ntuple("Pricings", "stock option security")
 
@@ -69,7 +67,7 @@ class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuat
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
-def main(*args, webapi, symbols=[], parameters={}, **kwargs):
+def main(*args, accounts, symbols=[], parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
@@ -79,9 +77,7 @@ def main(*args, webapi, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    alpaca_webapi = webapi[Website.ALPACA]
     alpaca_delayer = Delayer(3)
-
     with WebReader(delayer=alpaca_delayer) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=alpaca_webapi)
@@ -111,9 +107,9 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    with open(WEBAPI, "r") as apifile:
-        sysWebAPI = json.loads(apifile.read()).items()
-        sysWebAPI = {Website[str(website).upper()]: WebAPI(*values) for website, values in sysWebAPI}
+    function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
+    sysAccounts = pd.read_csv(ACCOUNTS, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
+    sysAccounts = {website: function(contents) for website, contents in sysAccounts.to_dict("index").items()}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
@@ -121,7 +117,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(webapi=sysWebAPI, symbols=sysSymbols, parameters=sysParameters)
+    main(accounts=sysAccounts, symbols=sysSymbols, parameters=sysParameters)
 
 
 
