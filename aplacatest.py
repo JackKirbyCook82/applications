@@ -23,7 +23,7 @@ REPOSITORY = os.path.join(ROOT, "repository")
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
-ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
+WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.orders import AlpacaOrderUploader
@@ -67,7 +67,7 @@ class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuat
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
 
 
-def main(*args, accounts, symbols=[], parameters={}, **kwargs):
+def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
@@ -77,12 +77,11 @@ def main(*args, accounts, symbols=[], parameters={}, **kwargs):
     security_criteria = lambda table: table["size"] >= 10
     strategy_selection = list(Strategies)
 
-    alpaca_delayer = Delayer(3)
-    with WebReader(delayer=alpaca_delayer) as alpaca_source:
+    with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, api=alpaca_webapi)
-        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, api=alpaca_webapi)
-        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, api=alpaca_webapi)
+        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
+        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
+        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
@@ -91,7 +90,7 @@ def main(*args, accounts, symbols=[], parameters={}, **kwargs):
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, api=alpaca_webapi)
+        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
@@ -108,8 +107,9 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
-    sysAccounts = pd.read_csv(ACCOUNTS, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
-    sysAccounts = {website: function(contents) for website, contents in sysAccounts.to_dict("index").items()}
+    sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
+    sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
+    sysDelayers = {Website.ETRADE: Delayer(3), Website.ALPACA: Delayer(3)}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
-    main(accounts=sysAccounts, symbols=sysSymbols, parameters=sysParameters)
+    main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
 
 
 
