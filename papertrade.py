@@ -76,9 +76,9 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     valuation_priority = lambda series: series[("npv", Variables.Scenario.MINIMUM)]
     valuation_liquidity = lambda series: series["size"] * 0.1
     value_criteria = lambda table: table[("npv", Variables.Scenario.MINIMUM)] >= + 100
-    cost_criteria = lambda table: table[("spot", Variables.Scenario.CURRENT)] >= - 1000
+    cost_criteria = lambda table: table[("spot", Variables.Scenario.CURRENT)] >= - 500
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    security_criteria = lambda table: table["size"] >= 20
+    security_criteria = lambda table: table["size"] >= 50
     strategy_selection = list(Strategies.Verticals)
 
     etrade_service = ETradePromptService(delayer=delayers[Website.ETRADE], webapi=webapi[Website.ETRADE])
