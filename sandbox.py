@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   TestTrade, Alpaca Market, Alpaca Order
+@name:   Portfolio Trading
 @author: Jack Kirby Cook
 
 """
@@ -26,14 +26,15 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
-from alpaca.orders import AlpacaOrderUploader
-from finance.securities import SecurityCalculator, PricingCalculator
+from alpaca.history import AlpacaBarsDownloader
+from finance.securities import SecurityCalculator, PricingCalculator, AnalyticCalculator
 from finance.strategies import StrategyCalculator
-from finance.valuations import ValuationCalculator
-from finance.market import MarketCalculator
-from finance.variables import Variables, Querys, Strategies
+from finance.technicals import TechnicalCalculator
+from finance.greeks import GreekCalculator
+from finance.risk import RiskCalculator
+from finance.variables import Querys, Variables, Strategies
 from webscraping.webreaders import WebReader
-from support.pipelines import Producer, Processor, Consumer, Carryover
+from support.pipelines import Producer, Processor, Carryover
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.variables import DateRange
@@ -49,50 +50,46 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
+class BarsDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="symbol->bars"): pass
 class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
 class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
+class TechnicalDownloader(TechnicalCalculator, Carryover, Processor, signature="bars->technical"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stock->stock"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
+class AnalyticCalculator(AnalyticCalculator, Carryover, Processor, query=Querys.Settlement, signature="option,technical->option"): pass
+class GreekCalculator(GreekCalculator, Carryover, Processor, signature="option->option"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
 class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
-class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
-class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
-class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospect->"): pass
+class RiskCalculator(RiskCalculator, Carryover, Processor, signature="strategy->"): pass
 
 
 def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
-    valuation_priority = lambda series: series[("npv", Variables.Scenario.MINIMUM)]
-    valuation_liquidity = lambda series: series["size"] * 0.1
-    value_criteria = lambda table: table[("npv", Variables.Scenario.MINIMUM)] >= + 100
-    cost_criteria = lambda table: table[("spot", Variables.Scenario.CURRENT)] >= - 500
-    valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    security_criteria = lambda table: table["size"] >= 50
+    security_criteria = lambda table: table["size"] >= 25
 
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
+        bars_downloader = BarsDownloader(name="BarsDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
+        technical_calculator = TechnicalDownloader(name="TechnicalCalculator", technicals=[Variables.Technical.STATISTIC])
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
+        analytic_calculator = AnalyticCalculator(name="AnalyticCalculator")
+        greek_calculator = GreekCalculator(name="GreekCalculator")
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
-        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
-        valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
-        market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
-        algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
-        algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
-        algotrade_pipeline = algotrade_pipeline + market_calculator + order_uploader
-        thread = RoutineThread(algotrade_pipeline, name="TestTradeThread").setup(**parameters)
+        risk_calculator = RiskCalculator(name="RiskCalculator")
+        portfolio_pipeline = symbols_dequeuer + bars_downloader + stocks_downloader + contract_downloader + options_downloader + stocks_downloader
+        portfolio_pipeline = portfolio_pipeline + technical_calculator + stock_pricing + option_pricing + analytic_calculator + greek_calculator + security_calculator + security_filter
+        portfolio_pipeline = portfolio_pipeline + strategy_calculator + risk_calculator
+        thread = RoutineThread(portfolio_pipeline, name="PortfolioThread").setup(**parameters)
         thread.start()
         thread.join()
 
@@ -106,15 +103,13 @@ if __name__ == "__main__":
     function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
     sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
     sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
-    sysDelayers = {Website.ETRADE: Delayer(3), Website.ALPACA: Delayer(3)}
+    sysDelayers = {Website.ETRADE: Delayer(5), Website.ALPACA: Delayer(3)}
     with open(TICKERS, "r") as tickerfile:
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
+    sysHistory = DateRange([(Datetime.today() - Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
-    sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
+    sysParameters = dict(current=Datetime.now().date(), history=sysHistory, expiry=sysExpiry)
+    sysParameters.update({"period": 252, "interest": 0.05, "dividend": 0.00, "discount": 0.05, "fees": 1.00})
     main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
-
-
-
