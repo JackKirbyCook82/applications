@@ -12,6 +12,7 @@ import random
 import logging
 import warnings
 import pandas as pd
+import xarray as xr
 from enum import Enum
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
@@ -29,9 +30,9 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from alpaca.history import AlpacaBarsDownloader
 from finance.securities import SecurityCalculator, PricingCalculator, AnalyticCalculator
 from finance.strategies import StrategyCalculator
+from finance.valuations import ValuationCalculator
 from finance.technicals import TechnicalCalculator
 from finance.greeks import GreekCalculator
-from finance.risk import RiskCalculator
 from finance.variables import Querys, Variables, Strategies
 from webscraping.webreaders import WebReader
 from support.pipelines import Producer, Processor, Carryover
@@ -62,7 +63,7 @@ class GreekCalculator(GreekCalculator, Carryover, Processor, signature="option->
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
 class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
-class RiskCalculator(RiskCalculator, Carryover, Processor, signature="strategy->"): pass
+class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->"): pass
 
 
 def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
@@ -85,10 +86,10 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
-        risk_calculator = RiskCalculator(name="RiskCalculator")
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         portfolio_pipeline = symbols_dequeuer + bars_downloader + stocks_downloader + contract_downloader + options_downloader + stocks_downloader
         portfolio_pipeline = portfolio_pipeline + technical_calculator + stock_pricing + option_pricing + analytic_calculator + greek_calculator + security_calculator + security_filter
-        portfolio_pipeline = portfolio_pipeline + strategy_calculator + risk_calculator
+        portfolio_pipeline = portfolio_pipeline + strategy_calculator + valuation_calculator
         thread = RoutineThread(portfolio_pipeline, name="PortfolioThread").setup(**parameters)
         thread.start()
         thread.join()
@@ -100,6 +101,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
+    xr.set_options(**{"display_max_rows": 25, "display_width": 250})
     function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
     sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
     sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
