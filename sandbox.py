@@ -88,7 +88,7 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         portfolio_pipeline = symbols_dequeuer + bars_downloader + stocks_downloader + contract_downloader + options_downloader + stocks_downloader
-        portfolio_pipeline = portfolio_pipeline + technical_calculator + stock_pricing + option_pricing + analytic_calculator + greek_calculator + security_calculator + security_filter
+        portfolio_pipeline = portfolio_pipeline + technical_calculator + stock_pricing + option_pricing + analytic_calculator + security_calculator + security_filter
         portfolio_pipeline = portfolio_pipeline + strategy_calculator + valuation_calculator
         thread = RoutineThread(portfolio_pipeline, name="PortfolioThread").setup(**parameters)
         thread.start()
@@ -99,7 +99,7 @@ if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
     pd.set_option("display.max_columns", 50)
-    pd.set_option("display.max_rows", 50)
+    pd.set_option("display.max_rows", 150)
     pd.set_option("display.width", 250)
     xr.set_options(**{"display_max_rows": 25, "display_width": 250})
     function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
