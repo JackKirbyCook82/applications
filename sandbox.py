@@ -85,7 +85,7 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         greek_calculator = GreekCalculator(name="GreekCalculator")
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
-        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=[Strategies.Verticals.Call])
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         portfolio_pipeline = symbols_dequeuer + bars_downloader + stocks_downloader + contract_downloader + options_downloader + stocks_downloader
         portfolio_pipeline = portfolio_pipeline + technical_calculator + stock_pricing + option_pricing + analytic_calculator + security_calculator + security_filter
