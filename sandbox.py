@@ -98,8 +98,8 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
-    pd.set_option("display.max_columns", 50)
-    pd.set_option("display.max_rows", 50)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', None)
     pd.set_option("display.width", 250)
     xr.set_options(**{"display_max_rows": 25, "display_width": 250})
     function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
@@ -113,5 +113,5 @@ if __name__ == "__main__":
     sysHistory = DateRange([(Datetime.today() - Timedelta(days=1)).date(), (Datetime.today() - Timedelta(weeks=104)).date()])
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), history=sysHistory, expiry=sysExpiry)
-    sysParameters.update({"period": 252, "interest": 0.05, "dividend": 0.00, "discount": 0.05, "fees": 1.00})
+    sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.05, "fees": 1.00})
     main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
