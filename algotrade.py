@@ -32,7 +32,6 @@ from etrade.service import ETradePromptService
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
-from finance.market import MarketCalculator
 from finance.variables import Variables, Querys, Strategies
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.synchronize import RoutineThread
@@ -60,20 +59,19 @@ class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, sign
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class MarketCalculator(MarketCalculator, Carryover, Processor, signature="valuation,security->prospect"): pass
-class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="prospect->"): pass
+class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="valuation->"): pass
 
 
 def main(*args, symbols=[], webapi, delayers, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
-    valuation_priority = lambda series: series[("npv", Variables.Scenario.MINIMUM)]
-    valuation_liquidity = lambda series: series["size"] * 0.1
-    value_criteria = lambda table: table[("npv", Variables.Scenario.MINIMUM)] >= + 1000
-    cost_criteria = lambda table: table[("spot", Variables.Scenario.CURRENT)] >= - 1000
+    security_criteria = lambda table: table["size"] >= + 10
+    value_criteria = lambda table: table["npv"] >= + 100
+    cost_criteria = lambda table: table["spot"] >= - 1000
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    security_criteria = lambda table: table["size"] >= 20
+    analytics = [Variables.Analytic.PAYOFF]
+    strategies = list(Strategies)
 
     etrade_service = ETradePromptService(delayer=delayers[Website.ETRADE], webapi=webapi[Website.ETRADE])
     with ETradePromptService(delayer=delayers[Website.ETRADE], service=etrade_service) as etrade_source:
@@ -85,15 +83,13 @@ def main(*args, symbols=[], webapi, delayers, parameters={}, **kwargs):
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
-        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
-        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies, analytics=analytics)
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator", analytics=analytics)
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
-        market_calculator = MarketCalculator(name="MarketCalculator", priority=valuation_priority, liquidity=valuation_liquidity)
         order_uploader = OrderUploader(name="OrderUploader", source=etrade_source, webapi=webapi[Website.ETRADE])
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
-        algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter
-        algotrade_pipeline = algotrade_pipeline + market_calculator + order_uploader
+        algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + order_uploader
         thread = RoutineThread(algotrade_pipeline, name="AlgoTradeThread").setup(**parameters)
         thread.start()
         thread.join()
