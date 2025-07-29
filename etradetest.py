@@ -75,7 +75,7 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     strategies = list(Strategies)
 
     etrade_service = ETradePromptService(delayer=delayers[Website.ETRADE], webapi=webapi[Website.ETRADE])
-    with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source, WebReader(delayer=delayers[Website.ETRADE], service=etrade_service) as etrade_source:
+    with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source, WebReader(delayer=delayers[Website.ETRADE], service=etrade_service, authenticate=True) as etrade_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
