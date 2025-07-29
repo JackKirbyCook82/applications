@@ -67,9 +67,9 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
-    security_criteria = lambda table: table["size"] >= + 10
-    value_criteria = lambda table: table["npv"] >= + 100
-    cost_criteria = lambda table: table["spot"] >= - 1000
+    security_criteria = lambda table: table["size"] >= + 25
+    value_criteria = lambda table: table["npv"] >= + 50
+    cost_criteria = lambda table: table["spot"] >= - 100
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
     analytics = [Variables.Analytic.PAYOFF]
     strategies = list(Strategies)
