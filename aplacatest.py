@@ -30,12 +30,12 @@ from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
-from finance.variables import Variables, Querys, Strategies
+from finance.concepts import Concepts, Querys, Strategies
 from webscraping.webreaders import WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
-from support.variables import DateRange
+from support.concepts import DateRange
 from support.filters import Filter
 from support.mixins import Delayer
 
@@ -69,7 +69,7 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 1000
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    analytics = [Variables.Analytic.PAYOFF]
+    analytics = [Concepts.Analytic.PAYOFF]
     strategies = list(Strategies)
 
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
@@ -108,7 +108,7 @@ if __name__ == "__main__":
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Variables.Markets.Term.LIMIT, tenure=Variables.Markets.Tenure.DAY)
+    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "dividend": 0.00, "discount": 0.00, "fees": 0.00})
     main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
 
