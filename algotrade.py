@@ -111,7 +111,7 @@ if __name__ == "__main__":
         random.shuffle(sysSymbols)
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
-    sysParameters.update({"period": 252, "interest": 0.05, "dividend": 0.00, "discount": 0.05, "fees": 1.00})
+    sysParameters.update({"period": 252, "interest": 0.05, "discount": 0.05, "fees": 1.00})
     main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
 
 
