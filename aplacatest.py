@@ -26,8 +26,11 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from alpaca.history import AlpacaBarsDownloader
 from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
+from finance.appraisal import AppraisalCalculator
+from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.concepts import Concepts, Querys, Strategies
@@ -50,10 +53,13 @@ Website = Enum("WebSite", "ALPACA ETRADE")
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
 class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
 class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
+class BarDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="symbol->bars"): pass
 class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
+class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="bars->technical"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stock->stock"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
+class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option,technical->security"): pass
+class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="security->security"): pass
 class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
@@ -69,24 +75,28 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 1000
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    analytics = [Concepts.Analytic.PAYOFF]
+    technicals = [Concepts.Technical.STATISTIC]
+    appraisals = list(Concepts.Appraisal)
     strategies = list(Strategies)
 
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
+        bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")
+        appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=appraisals)
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
-        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies, analytics=analytics)
-        valuation_calculator = ValuationCalculator(name="ValuationCalculator", analytics=analytics)
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies)
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
-        algotrade_pipeline = algotrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
+        algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + bar_downloader + options_downloader
+        algotrade_pipeline = algotrade_pipeline + technical_calculator + stock_pricing + option_pricing + security_calculator + appraisal_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + order_uploader
         thread = RoutineThread(algotrade_pipeline, name="TestTradeThread").setup(**parameters)
         thread.start()
@@ -108,7 +118,8 @@ if __name__ == "__main__":
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
-    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
+    sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
+    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, history=sysHistory, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "discount": 0.00, "fees": 0.00})
     main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
 
