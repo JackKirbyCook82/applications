@@ -58,8 +58,8 @@ class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="
 class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="bars->technical"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stock->stock"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option,technical->security"): pass
-class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="security->security"): pass
+class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="option,technical->option"): pass
+class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
 class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
@@ -88,15 +88,15 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
-        security_calculator = SecurityCalculator(name="SecurityCalculator")
         appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=appraisals)
+        security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + bar_downloader + options_downloader
-        algotrade_pipeline = algotrade_pipeline + technical_calculator + stock_pricing + option_pricing + security_calculator + appraisal_calculator + security_filter
+        algotrade_pipeline = algotrade_pipeline + technical_calculator + stock_pricing + option_pricing + appraisal_calculator + security_calculator + security_filter
         algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + order_uploader
         thread = RoutineThread(algotrade_pipeline, name="TestTradeThread").setup(**parameters)
         thread.start()
