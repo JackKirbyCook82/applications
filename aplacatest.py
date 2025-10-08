@@ -50,21 +50,21 @@ __license__ = "MIT License"
 
 
 Website = Enum("WebSite", "ALPACA ETRADE")
-class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbol"): pass
-class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbol->stock"): pass
-class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbol->contract"): pass
-class BarDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="symbol->bars"): pass
-class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contract->option"): pass
-class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="bars->technical"): pass
-class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stock->stock"): pass
-class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="option->option"): pass
-class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="option,technical->option"): pass
-class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stock,option->security"): pass
-class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="security->security"): pass
-class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="security->strategy"): pass
-class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategy->valuation"): pass
-class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuation->valuation"): pass
-class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="valuation->"): pass
+class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbols"): pass
+class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="symbols->stocks"): pass
+class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="symbols->contracts"): pass
+class BarDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="symbols->bars"): pass
+class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="contracts->options"): pass
+class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="bars->technicals"): pass
+class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="stocks->stocks"): pass
+class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="options->options"): pass
+class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="options,technicals->options"): pass
+class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="stocks,options->securities"): pass
+class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="securities->securities"): pass
+class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="securities->strategies"): pass
+class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategies->valuations"): pass
+class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuations->valuations"): pass
+class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="valuations->"): pass
 
 
 def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
