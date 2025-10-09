@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   TestTrade, Alpaca Market, Alpaca Order
+@name:   Alpaca Trading
 @author: Jack Kirby Cook
 
 """
@@ -33,6 +33,7 @@ from finance.appraisal import AppraisalCalculator
 from finance.technicals import TechnicalCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
+from finance.prospects import ProspectCalculator
 from finance.concepts import Concepts, Querys, Strategies
 from webscraping.webreaders import WebReader
 from support.pipelines import Producer, Processor, Consumer, Carryover
@@ -64,16 +65,19 @@ class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, sign
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="securities->strategies"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategies->valuations"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuations->valuations"): pass
-class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="valuations->"): pass
+class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuations->prospects"): pass
+class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospects->"): pass
 
 
 def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
-    security_criteria = lambda table: table["size"] >= + 10
+    prospect_liquidity = lambda dataframe: dataframe["size"] * 0.1
+    prospect_priority = lambda dataframe: dataframe["npv"]
+    security_criteria = lambda table: table["size"] >= + 25
     value_criteria = lambda table: table["npv"] >= + 100
-    cost_criteria = lambda table: table["spot"] >= - 1000
+    cost_criteria = lambda table: table["spot"] >= - 500
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
     technicals = [Concepts.Technical.STATISTIC]
     appraisals = [Concepts.Appraisal.BLACKSCHOLES]
@@ -94,11 +98,12 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
+        prospects_calculator = ProspectCalculator(name="ProspectCalculator", priority=prospect_priority, liquidity=prospect_liquidity)
         order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         algotrade_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + bar_downloader + options_downloader
         algotrade_pipeline = algotrade_pipeline + technical_calculator + stock_pricing + option_pricing + appraisal_calculator + security_calculator + security_filter
-        algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + order_uploader
-        thread = RoutineThread(algotrade_pipeline, name="TestTradeThread").setup(**parameters)
+        algotrade_pipeline = algotrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + prospects_calculator + order_uploader
+        thread = RoutineThread(algotrade_pipeline, name="AlpacaTradeThread").setup(**parameters)
         thread.start()
         thread.join()
 
