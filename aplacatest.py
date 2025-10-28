@@ -79,8 +79,8 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 500
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
+    appraisals = [Concepts.Appraisal.BLACKSCHOLES, Concepts.Appraisal.IMPLIED]
     technicals = [Concepts.Technical.STATISTIC]
-    appraisals = [Concepts.Appraisal.BLACKSCHOLES]
     strategies = list(Strategies)
 
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
