@@ -80,8 +80,8 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 500
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    technicals = [Concepts.Technical.STATISTIC]
     appraisals = [Concepts.Appraisal.BLACKSCHOLES]
+    technicals = [Concepts.Technical.STATISTIC]
     strategies = list(Strategies)
 
     etrade_service = ETradePromptService(delayer=delayers[Website.ETRADE], webapi=webapi[Website.ETRADE])

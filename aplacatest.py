@@ -31,6 +31,7 @@ from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.appraisal import AppraisalCalculator
 from finance.technicals import TechnicalCalculator
+from finance.implied import ImpliedCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator
@@ -65,7 +66,7 @@ class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, sign
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="securities->strategies"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="strategies->valuations"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="valuations->valuations"): pass
-class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="valuations->prospects"): pass
+class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="securities,valuations->prospects"): pass
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="prospects->"): pass
 
 
@@ -79,7 +80,7 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 500
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    appraisals = [Concepts.Appraisal.BLACKSCHOLES, Concepts.Appraisal.IMPLIED]
+    appraisals = [Concepts.Appraisal.BLACKSCHOLES]
     technicals = [Concepts.Technical.STATISTIC]
     strategies = list(Strategies)
 
