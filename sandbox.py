@@ -57,9 +57,15 @@ class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol,
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="(options)->options"): pass
 class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="(options),{technicals}->options"): pass
 class ImpliedCalculator(ImpliedCalculator, Carryover, Processor, signature="(options)->options"): pass
+
 class CurveCalculator(Carryover, Consumer, signature="(options)->"):
     def execute(self, options, /, **kwargs):
-        print(options)
+
+        calls = options[options["option"] == Concepts.Securities.Option.CALL].sort_values(by="strike", ascending=True)
+        puts = options[options["option"] == Concepts.Securities.Option.PUT].sort_values(by="strike", ascending=True)
+        with pd.option_context("display.max_rows", None, "display.max_columns", None):
+            print(calls); print(puts)
+
         raise Exception()
 
 
