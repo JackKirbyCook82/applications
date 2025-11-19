@@ -60,9 +60,10 @@ class ImpliedCalculator(ImpliedCalculator, Carryover, Processor, signature="(opt
 
 class CurveCalculator(Carryover, Consumer, signature="(options)->"):
     def execute(self, options, /, **kwargs):
-
-        calls = options[options["option"] == Concepts.Securities.Option.CALL].sort_values(by="strike", ascending=True)
-        puts = options[options["option"] == Concepts.Securities.Option.PUT].sort_values(by="strike", ascending=True)
+        calls = (options["option"] == Concepts.Securities.Option.CALL) & options["implied"].notna()
+        puts = (options["option"] == Concepts.Securities.Option.PUT) & options["implied"].notna()
+        calls = options[calls].dropna(how="all", inplace=False).sort_values(by="strike", ascending=True).reset_index(drop=True, inplace=False)
+        puts = options[puts].dropna(how="all", inplace=False).sort_values(by="strike", ascending=True).reset_index(drop=True, inplace=False)
         with pd.option_context("display.max_rows", None, "display.max_columns", None):
             print(calls); print(puts)
 
@@ -110,7 +111,7 @@ if __name__ == "__main__":
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
-    sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
+    sysExpiry = DateRange([(Datetime.today() + Timedelta(weeks=26)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, history=sysHistory, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
     sysParameters.update({"period": 252, "interest": 0.00, "discount": 0.00})
