@@ -75,7 +75,7 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     appraisals = [Concepts.Appraisal.BLACKSCHOLES]
-    technicals = [Concepts.Technical.STATISTIC]
+    technicals = [Concepts.Technical.STATS]
 
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
