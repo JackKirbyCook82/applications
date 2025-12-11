@@ -71,19 +71,16 @@ class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="(v
 class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="(prospects)->"): pass
 
 
-def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
+def main(*args, symbols=[], webapi={}, delayers={}, period, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
+    valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
     prospect_liquidity = lambda dataframe: dataframe["size"] * 0.1
     prospect_priority = lambda dataframe: dataframe["npv"]
     security_criteria = lambda table: table["size"] >= + 25
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 500
-    valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    appraisals = [Concepts.Appraisal.BLACKSCHOLES]
-    technicals = [Concepts.Technical.STATS]
-    strategies = list(Strategies)
 
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
@@ -91,14 +88,14 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
-        appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=appraisals)
+        appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=list(Concepts.Appraisal))
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
         implied_calculator = ImpliedCalculator(name="ImpliedCalculator")
-        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies)
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         prospects_calculator = ProspectCalculator(name="ProspectCalculator", priority=prospect_priority, liquidity=prospect_liquidity)
@@ -118,7 +115,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
+    function = lambda contents: ntuple("WebApi", list(contents.keys()))(*contents.values())
     sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
     sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
     sysDelayers = {Website.ETRADE: Delayer(3), Website.ALPACA: Delayer(3)}

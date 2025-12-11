@@ -74,15 +74,12 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
+    valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
     prospect_liquidity = lambda dataframe: dataframe["size"] * 0.1
     prospect_priority = lambda dataframe: dataframe["npv"]
     security_criteria = lambda table: table["size"] >= + 25
     value_criteria = lambda table: table["npv"] >= + 100
     cost_criteria = lambda table: table["spot"] >= - 500
-    valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
-    appraisals = [Concepts.Appraisal.BLACKSCHOLES]
-    technicals = [Concepts.Technical.STATS]
-    strategies = list(Strategies)
 
     etrade_service = ETradePromptService(delayer=delayers[Website.ETRADE], webapi=webapi[Website.ETRADE])
     with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source, WebReader(delayer=delayers[Website.ETRADE], service=etrade_service, authenticate=True) as etrade_source:
@@ -91,13 +88,13 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
         options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
-        appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=appraisals)
+        appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=list(Concepts.Appraisal))
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
-        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=strategies)
+        strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         prospects_calculator = ProspectCalculator(name="ProspectCalculator", priority=prospect_priority, liquidity=prospect_liquidity)
