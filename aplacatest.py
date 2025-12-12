@@ -88,8 +88,8 @@ def main(*args, symbols=[], webapi={}, delayers={}, period, parameters={}, **kwa
         contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        statistics_equation = TechnicalEquation.STATS(*args, period=period, **kwargs)
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=statistics_equation)
+        statistics_equation = TechnicalEquation.STATS(period=period)
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=[statistics_equation])
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=list(Concepts.Appraisal))
@@ -127,8 +127,8 @@ if __name__ == "__main__":
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
     sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, history=sysHistory, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
-    sysParameters.update({"period": 252, "interest": 0.00, "discount": 0.00, "fees": 0.00})
-    main(webapi=sysWebApi, delayers=sysDelayers, symbols=sysSymbols, parameters=sysParameters)
+    sysParameters.update({"interest": 0.00, "discount": 0.00, "fees": 0.00})
+    main(symbols=sysSymbols, webapi=sysWebApi, delayers=sysDelayers, period=252, parameters=sysParameters)
 
 
 
