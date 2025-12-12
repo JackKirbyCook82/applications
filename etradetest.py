@@ -31,7 +31,7 @@ from etrade.service import ETradePromptService
 from alpaca.history import AlpacaBarsDownloader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.appraisal import AppraisalCalculator
-from finance.technicals import TechnicalCalculator
+from finance.technicals import TechnicalCalculator, TechnicalEquation
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator
@@ -88,7 +88,8 @@ def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
         options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=)
+        statistics_equation = TechnicalEquation.STATS(*args, period=period, **kwargs)
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=statistics_equation)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=list(Concepts.Appraisal))
