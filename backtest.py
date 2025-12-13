@@ -42,18 +42,14 @@ __license__ = "MIT License"
 Website = Enum("WebSite", "ALPACA ETRADE")
 class BarDownloader(AlpacaBarsDownloader, Producer): pass
 class TechnicalCalculator(TechnicalCalculator, Processor): pass
-class BackTestingCalculator(BackTestingCalculator, Consumer): pass
+class BackTestingCalculator(BackTestingCalculator, Processor): pass
 
 
 def main(*args, symbol, webapi, delayer, parameters={}, **kwargs):
     with WebReader(delayer=delayer) as alpaca_source:
-        macd_equation = TechnicalEquation.MACD()
-        rsi_equation = TechnicalEquation.RSI()
-        bb_equation = TechnicalEquation.BB()
-        mfi_equation = TechnicalEquation.MFI()
-        technical_equations = [macd_equation, rsi_equation, bb_equation, mfi_equation]
+        technical_equations = [TechnicalEquation.BARS(), TechnicalEquation.MACD(), TechnicalEquation.RSI(period=14), TechnicalEquation.BB(period=20), TechnicalEquation.MFI(period=14)]
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=[technical_equations])
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=technical_equations)
         backtesting_calculator = BackTestingCalculator(name="BackTestingCalculator")
         backtesting_pipeline = bar_downloader + technical_calculator + backtesting_calculator
         backtesting_thread = RoutineThread(backtesting_pipeline, name="BackTestingThread").setup(symbol, **parameters)
@@ -69,7 +65,7 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     function = lambda contents: ntuple("WebApi", list(contents.keys()))(*contents.values())
     sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
-    sysWebApi = function(sysWebApi.to_dict("index")[Website.ALPACA])
+    sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
     sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*5)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     sysParameters = dict(current=Datetime.now().date(), history=sysHistory)
     main(symbol=Querys.Symbol("SPY"), webapi=sysWebApi, delayer=Delayer(3), parameters=sysParameters)
