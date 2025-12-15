@@ -47,7 +47,7 @@ class BackTestingCalculator(BackTestingCalculator, Processor): pass
 
 def main(*args, symbol, webapi, delayer, parameters={}, **kwargs):
     with WebReader(delayer=delayer) as alpaca_source:
-        technical_equations = [TechnicalEquation.BARS(), TechnicalEquation.MACD(), TechnicalEquation.RSI(period=14), TechnicalEquation.BB(period=20), TechnicalEquation.MFI(period=14)]
+        technical_equations = [TechnicalEquation.BARS(), TechnicalEquation.MACD(), TechnicalEquation.RSI(period=14), TechnicalEquation.BB(period=20), TechnicalEquation.MFI(period=14), TechnicalEquation.CMF(period=14)]
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=technical_equations)
         backtesting_calculator = BackTestingCalculator(name="BackTestingCalculator")
