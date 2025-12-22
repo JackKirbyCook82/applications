@@ -24,6 +24,7 @@ WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
 from alpaca.history import AlpacaBarsDownloader
 from finance.technicals import TechnicalCalculator, TechnicalEquation
+from finance.trendlines import TrendlineCalculator
 from finance.backtesting import BackTestingCalculator
 from finance.concepts import Querys
 from webscraping.webreaders import WebReader
@@ -42,6 +43,7 @@ __license__ = "MIT License"
 Website = Enum("WebSite", "ALPACA ETRADE")
 class BarDownloader(AlpacaBarsDownloader, Producer): pass
 class TechnicalCalculator(TechnicalCalculator, Processor): pass
+class TrendlineCalculator(TechnicalCalculator, Processor): pass
 class BackTestingCalculator(BackTestingCalculator, Processor): pass
 
 
@@ -50,8 +52,9 @@ def main(*args, symbol, webapi, delayer, parameters={}, **kwargs):
         technical_equations = []
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=technical_equations)
+        trendline_calculator = TrendlineCalculator(name="TrendlineCalculator")
         backtesting_calculator = BackTestingCalculator(name="BackTestingCalculator")
-        backtesting_pipeline = bar_downloader + technical_calculator + backtesting_calculator
+        backtesting_pipeline = bar_downloader + technical_calculator + trendline_calculator + backtesting_calculator
         backtesting_thread = RoutineThread(backtesting_pipeline, name="BackTestingThread").setup(symbol, **parameters)
         backtesting_thread.start()
         backtesting_thread.join()
