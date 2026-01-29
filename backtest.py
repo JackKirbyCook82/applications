@@ -26,7 +26,7 @@ from alpaca.history import AlpacaBarsDownloader
 from finance.technicals import TechnicalCalculator, TechnicalEquation
 from finance.trendlines import TrendlineCalculator
 from finance.backtesting import BackTestingCalculator
-from finance.concepts import Querys
+from finance.concepts import Concepts, Querys
 from webscraping.webreaders import WebReader
 from support.pipelines import Producer, Processor
 from support.synchronize import RoutineThread
@@ -52,7 +52,7 @@ def main(*args, symbol, webapi, delayer, parameters={}, **kwargs):
         technical_equations = [TechnicalEquation.MACD(), TechnicalEquation.ATR(period=14)]
         bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=technical_equations)
-        trendline_calculator = TrendlineCalculator(name="TrendlineCalculator", window=7, threshold=2/100, period=5)
+        trendline_calculator = TrendlineCalculator(name="TrendlineCalculator", indicator=Concepts.Technicals.Trend.MACD, window=7, threshold=2/100, period=5)
         backtesting_calculator = BackTestingCalculator(name="BackTestingCalculator")
         backtesting_pipeline = bar_downloader + technical_calculator + trendline_calculator + backtesting_calculator
         backtesting_thread = RoutineThread(backtesting_pipeline, name="BackTestingThread").setup(symbol, **parameters)
