@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   Alpaca Trading
+@name:   ETrade Trading
 @author: Jack Kirby Cook
 
 """
@@ -25,13 +25,10 @@ if ROOT not in sys.path: sys.path.append(ROOT)
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 WEBAPI = os.path.join(RESOURCES, "webapi.txt")
 
-from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
-from alpaca.history import AlpacaBarsDownloader
-from alpaca.orders import AlpacaOrderUploader
+from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
+from etrade.orders import ETradeOrderUploader
+from etrade.service import ETradePromptService
 from finance.securities import SecurityCalculator, PricingCalculator
-from finance.appraisal import AppraisalCalculator
-from finance.technicals import TechnicalCalculator, TechnicalEquation
-from finance.implied import ImpliedCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator
@@ -53,61 +50,52 @@ __license__ = "MIT License"
 
 Website = Enum("WebSite", "ALPACA ETRADE")
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbols"): pass
-class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="(symbols)->stocks"): pass
-class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="(symbols)->contracts"): pass
-class BarDownloader(AlpacaBarsDownloader, Carryover, Processor, signature="(symbols)->bars"): pass
-class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="(contracts)->options"): pass
-class TechnicalCalculator(TechnicalCalculator, Carryover, Processor, signature="(bars)->technicals"): pass
+class StockDownloader(ETradeStockDownloader, Carryover, Processor, signature="(symbols)->stocks"): pass
+class ExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="(symbols)->expires"): pass
+class OptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="(symbols,expires)->options"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="(stocks)->stocks"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="(options)->options"): pass
-class AppraisalCalculator(AppraisalCalculator, Carryover, Processor, signature="(options),{technicals}->options"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="(stocks,options)->securities"): pass
 class SecurityFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="(securities)->securities"): pass
-class ImpliedCalculator(ImpliedCalculator, Carryover, Processor, signature="(securities)->securities"): pass
 class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="(securities)->strategies"): pass
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="(strategies)->valuations"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="(valuations)->valuations"): pass
 class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="(valuations)->prospects"): pass
-class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="(prospects)->"): pass
+class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="(prospects)->"): pass
 
 
-def main(*args, symbols=[], webapi={}, delayers={}, period, parameters={}, **kwargs):
+def main(*args, symbols=[], webapi={}, delayers={}, parameters={}, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     valuation_criteria = lambda table: value_criteria(table) & cost_criteria(table)
     prospect_liquidity = lambda dataframe: dataframe["size"] * 0.1
     prospect_priority = lambda dataframe: dataframe["npv"]
-    security_criteria = lambda table: table["size"] >= + 25
-    value_criteria = lambda table: table["npv"] >= + 100
-    cost_criteria = lambda table: table["spot"] >= - 500
+    security_criteria = lambda table: table["size"] >= + 20
+    value_criteria = lambda table: table["npv"] >= + 50
+    cost_criteria = lambda table: table["spot"] >= - 1000
 
-    with WebReader(delayer=delayers[Website.ALPACA]) as alpaca_source:
+    etrade_service = ETradePromptService(delayer=delayers[Website.ETRADE], webapi=webapi[Website.ETRADE])
+    with WebReader(delayer=delayers[Website.ETRADE], service=etrade_service, authenticate=True) as etrade_source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        contract_downloader = ContractDownloader(name="ContractDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        options_downloader = OptionDownloader(name="OptionDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        statistics_equation = TechnicalEquation.STATS(period=period)
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=[statistics_equation])
+        stocks_downloader = StockDownloader(name="StockDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
+        expires_downloader = ExpireDownloader(name="ExpireDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
+        options_downloader = OptionDownloader(name="OptionDownloader", source=etrade_source, webapi=webapi[Website.ETRADE])
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
-        appraisal_calculator = AppraisalCalculator(name="AppraisalCalculator", appraisals=list(Concepts.Appraisal))
         security_calculator = SecurityCalculator(name="SecurityCalculator")
         security_filter = SecurityFilter(name="SecurityFilter", criteria=security_criteria)
-        implied_calculator = ImpliedCalculator(name="ImpliedCalculator")
         strategy_calculator = StrategyCalculator(name="StrategyCalculator", strategies=list(Strategies))
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         prospects_calculator = ProspectCalculator(name="ProspectCalculator", priority=prospect_priority, liquidity=prospect_liquidity)
-        order_uploader = OrderUploader(name="OrderUploader", source=alpaca_source, webapi=webapi[Website.ALPACA])
-        alpaca_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + bar_downloader + options_downloader
-        alpaca_pipeline = alpaca_pipeline + technical_calculator + stock_pricing + option_pricing + appraisal_calculator
-        alpaca_pipeline = alpaca_pipeline + security_calculator + security_filter + implied_calculator + strategy_calculator
-        alpaca_pipeline = alpaca_pipeline + valuation_calculator + valuation_filter + prospects_calculator + order_uploader
-        alpaca_thread = RoutineThread(alpaca_pipeline, name="AlpacaThread").setup(**parameters)
-        alpaca_thread.start()
-        alpaca_thread.join()
+        order_uploader = OrderUploader(name="OrderUploader", source=etrade_source, webapi=webapi[Website.ETRADE])
+        etrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
+        etrade_pipeline = etrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
+        etrade_pipeline = etrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + prospects_calculator + order_uploader
+        etrade_thread = RoutineThread(etrade_pipeline, name="ETradeThread").setup(**parameters)
+        etrade_thread.start()
+        etrade_thread.join()
 
 
 if __name__ == "__main__":
@@ -116,7 +104,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    function = lambda contents: ntuple("WebApi", list(contents.keys()))(*contents.values())
+    function = lambda contents: ntuple("Account", list(contents.keys()))(*contents.values())
     sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
     sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
     sysDelayers = {Website.ETRADE: Delayer(3), Website.ALPACA: Delayer(3)}
@@ -124,11 +112,11 @@ if __name__ == "__main__":
         sysTickers = list(map(str.strip, tickerfile.read().split("\n")))
         sysSymbols = list(map(Querys.Symbol, sysTickers))
         random.shuffle(sysSymbols)
-    sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52)).date()])
+    sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*2)).date()])
     sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
-    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, history=sysHistory, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
-    sysParameters.update({"interest": 0.00, "discount": 0.00, "fees": 0.00})
-    main(symbols=sysSymbols, webapi=sysWebApi, delayers=sysDelayers, period=252, parameters=sysParameters)
+    sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
+    sysParameters.update({"interest": 0.05, "discount": 0.05, "fees": 1.00})
+    main(symbols=sysSymbols, webapi=sysWebApi, delayers=sysDelayers, parameters=sysParameters)
 
 
 
