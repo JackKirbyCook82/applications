@@ -12,6 +12,7 @@ import logging
 import warnings
 import pandas as pd
 from enum import Enum
+from types import SimpleNamespace
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
@@ -20,7 +21,8 @@ MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 RESOURCES = os.path.join(ROOT, "resources")
 if ROOT not in sys.path: sys.path.append(ROOT)
-WEBAPI = os.path.join(RESOURCES, "webapi.txt")
+AUTHENTICATORS = os.path.join(RESOURCES, "authenticators.txt")
+ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 
 from alpaca.history import AlpacaBarsDownloader
 from finance.technicals import TechnicalCalculator, TechnicalEquation
@@ -28,10 +30,10 @@ from finance.trendlines import TrendlineCalculator
 from finance.backtesting import BackTestingCalculator
 from finance.concepts import Concepts, Querys
 from webscraping.webreaders import WebReader
+from webscraping.websources import WebDelayer
 from support.pipelines import Producer, Processor
 from support.synchronize import RoutineThread
 from support.concepts import DateRange
-from support.mixins import Delayer
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -40,17 +42,16 @@ __copyright__ = "Copyright 2025, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-Website = Enum("WebSite", "ALPACA ETRADE")
 class BarDownloader(AlpacaBarsDownloader, Producer): pass
 class TechnicalCalculator(TechnicalCalculator, Processor): pass
 class TrendlineCalculator(TrendlineCalculator, Processor): pass
 class BackTestingCalculator(BackTestingCalculator, Processor): pass
 
 
-def main(*args, symbol, webapi, delayer, parameters={}, **kwargs):
-    with WebReader(delayer=delayer) as alpaca_source:
+def main(*args, symbol, account, authenticator, delayer, parameters={}, **kwargs):
+    with WebReader(account=account, authenticator=authenticator, delayer=delayer) as source:
         technical_equations = [TechnicalEquation.MACD(), TechnicalEquation.ATR(period=14)]
-        bar_downloader = BarDownloader(name="BarDownloader", source=alpaca_source, webapi=webapi[Website.ALPACA])
+        bar_downloader = BarDownloader(name="BarDownloader", source=source)
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", equations=technical_equations)
         trendline_calculator = TrendlineCalculator(name="TrendlineCalculator", indicator=Concepts.Technicals.Trend.MACD, window=7, threshold=2/100, period=5)
         backtesting_calculator = BackTestingCalculator(name="BackTestingCalculator")
@@ -66,10 +67,12 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    function = lambda contents: ntuple("WebApi", list(contents.keys()))(*contents.values())
-    sysWebApi = pd.read_csv(WEBAPI, sep=" ", header=0, index_col=0, converters={0: lambda website: Website[str(website).upper()]})
-    sysWebApi = {website: function(contents) for website, contents in sysWebApi.to_dict("index").items()}
+    sysAuthenticator = SimpleNamespace(**pd.read_csv(AUTHENTICATORS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
+    sysAccount = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
+    sysDelayer = WebDelayer(3)
     sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*5)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     sysParameters = dict(current=Datetime.now().date(), history=sysHistory)
-    main(symbol=Querys.Symbol("SPY"), webapi=sysWebApi, delayer=Delayer(3), parameters=sysParameters)
+    main(symbol=Querys.Symbol("SPY"), account=sysAccount, authenticator=sysAuthenticator, delayer=sysDelayer, parameters=sysParameters)
+
+
 
