@@ -30,7 +30,7 @@ from finance.trendlines import TrendlineCalculator
 from finance.backtesting import BackTestingCalculator
 from finance.concepts import Concepts, Querys
 from webscraping.webreaders import WebReader
-from webscraping.websources import WebDelayer
+from webscraping.websupport import WebDelayer
 from support.pipelines import Producer, Processor
 from support.synchronize import RoutineThread
 from support.concepts import DateRange

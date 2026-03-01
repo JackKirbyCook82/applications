@@ -35,7 +35,7 @@ from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator
 from finance.concepts import Concepts, Querys, Strategies
 from webscraping.webreaders import WebReader
-from webscraping.websources import WebDelayer
+from webscraping.websupport import WebDelayer
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
