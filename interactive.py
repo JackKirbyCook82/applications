@@ -29,7 +29,7 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from interactive.market import InteractiveStockDownloader, InteractiveContractDownloader, InteractiveOptionDownloader
 from interactive.orders import InteractiveOrderUploader
-from interactive.source import InteractiveSource
+from interactive.subscription import InteractiveSubscription
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -73,7 +73,7 @@ def main(*args, symbols, account, delayer, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 10
     cost_criteria = lambda table: table["spot"] >= - 1000
 
-    with InteractiveSource(host="localhost", port=7497, account=account, delayer=delayer) as source:
+    with InteractiveSubscription(host="localhost", port=7497, account=account, delayer=delayer) as source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=source)
         contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
