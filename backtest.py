@@ -11,11 +11,9 @@ import sys
 import logging
 import warnings
 import pandas as pd
-from enum import Enum
 from types import SimpleNamespace
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
-from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -48,7 +46,7 @@ class TrendlineCalculator(TrendlineCalculator, Processor): pass
 class BackTestingCalculator(BackTestingCalculator, Processor): pass
 
 
-def main(*args, symbol, account, authenticator, delayer, parameters={}, **kwargs):
+def main(*args, symbol, account, authenticator, delayer, parameters, **kwargs):
     with WebReader(account=account, authenticator=authenticator, delayer=delayer) as source:
         technical_equations = [TechnicalEquation.MACD(), TechnicalEquation.ATR(period=14)]
         bar_downloader = BarDownloader(name="BarDownloader", source=source)
@@ -67,8 +65,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    sysAuthenticator = SimpleNamespace(**pd.read_csv(AUTHENTICATORS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
-    sysAccount = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
+    sysAuthenticator = SimpleNamespace(**pd.read_csv(AUTHENTICATORS, sep=r"\s+", converters={"live": bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
+    sysAccount = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
     sysDelayer = WebDelayer(3)
     sysHistory = DateRange([(Datetime.today() - Timedelta(weeks=52*5)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     sysParameters = dict(current=Datetime.now().date(), history=sysHistory)

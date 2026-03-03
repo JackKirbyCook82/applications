@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Feb 15 2025
-@name:   ETrade Trading
+@name:   Alpaca Trading
 @author: Jack Kirby Cook
 
 """
@@ -16,7 +16,6 @@ from types import SimpleNamespace
 from attr.converters import to_bool
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
-from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -27,9 +26,8 @@ AUTHENTICATORS = os.path.join(RESOURCES, "authenticators.txt")
 ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
-from etrade.market import ETradeStockDownloader, ETradeExpireDownloader, ETradeOptionDownloader
-from etrade.orders import ETradeOrderUploader
-from etrade.service import ETradePromptService
+from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from alpaca.orders import AlpacaOrderUploader
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
@@ -51,9 +49,9 @@ __license__ = "MIT License"
 
 
 class SymbolDequeuer(Dequeuer, Carryover, Producer, signature="->symbols"): pass
-class StockDownloader(ETradeStockDownloader, Carryover, Processor, signature="(symbols)->stocks"): pass
-class ExpireDownloader(ETradeExpireDownloader, Carryover, Processor, signature="(symbols)->expires"): pass
-class OptionDownloader(ETradeOptionDownloader, Carryover, Processor, signature="(symbols,expires)->options"): pass
+class StockDownloader(AlpacaStockDownloader, Carryover, Processor, signature="(symbols)->stocks"): pass
+class ContractDownloader(AlpacaContractDownloader, Carryover, Processor, signature="(symbols)->contracts"): pass
+class OptionDownloader(AlpacaOptionDownloader, Carryover, Processor, signature="(contracts)->options"): pass
 class StockPricing(PricingCalculator, Carryover, Processor, query=Querys.Symbol, signature="(stocks)->stocks"): pass
 class OptionPricing(PricingCalculator, Carryover, Processor, query=Querys.Settlement, signature="(options)->options"): pass
 class SecurityCalculator(SecurityCalculator, Carryover, Processor, signature="(stocks,options)->securities"): pass
@@ -62,10 +60,10 @@ class StrategyCalculator(StrategyCalculator, Carryover, Processor, signature="(s
 class ValuationCalculator(ValuationCalculator, Carryover, Processor, signature="(strategies)->valuations"): pass
 class ValuationFilter(Filter, Carryover, Processor, query=Querys.Settlement, signature="(valuations)->valuations"): pass
 class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="(valuations)->prospects"): pass
-class OrderUploader(ETradeOrderUploader, Carryover, Consumer, signature="(prospects)->"): pass
+class OrderUploader(AlpacaOrderUploader, Carryover, Consumer, signature="(prospects)->"): pass
 
 
-def main(*args, symbols, account, authenticator, delayer, parameters={}, **kwargs):
+def main(*args, symbols, account, authenticator, delayer, parameters, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
@@ -76,10 +74,10 @@ def main(*args, symbols, account, authenticator, delayer, parameters={}, **kwarg
     value_criteria = lambda table: table["npv"] >= + 10
     cost_criteria = lambda table: table["spot"] >= - 1000
 
-    with WebReader(service=ETradePromptService(), account=account, authenticator=authenticator, delayer=delayer) as source:
+    with WebReader(account=account, authenticator=authenticator, delayer=delayer) as source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=source)
-        expires_downloader = ExpireDownloader(name="ExpireDownloader", source=source)
+        contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
         options_downloader = OptionDownloader(name="OptionDownloader", source=source)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
@@ -90,12 +88,12 @@ def main(*args, symbols, account, authenticator, delayer, parameters={}, **kwarg
         valuation_filter = ValuationFilter(name="ValuationFilter", criteria=valuation_criteria)
         prospects_calculator = ProspectCalculator(name="ProspectCalculator", priority=prospect_priority, liquidity=prospect_liquidity)
         order_uploader = OrderUploader(name="OrderUploader", source=source)
-        etrade_pipeline = symbols_dequeuer + stocks_downloader + expires_downloader + options_downloader
-        etrade_pipeline = etrade_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
-        etrade_pipeline = etrade_pipeline + strategy_calculator + valuation_calculator + valuation_filter + prospects_calculator + order_uploader
-        etrade_thread = RoutineThread(etrade_pipeline, name="ETradeThread").setup(**parameters)
-        etrade_thread.start()
-        etrade_thread.join()
+        alpaca_pipeline = symbols_dequeuer + stocks_downloader + contract_downloader + options_downloader
+        alpaca_pipeline = alpaca_pipeline + stock_pricing + option_pricing + security_calculator + security_filter
+        alpaca_pipeline = alpaca_pipeline + strategy_calculator + valuation_calculator + valuation_filter + prospects_calculator + order_uploader
+        alpaca_thread = RoutineThread(alpaca_pipeline, name="AlpacaThread").setup(**parameters)
+        alpaca_thread.start()
+        alpaca_thread.join()
 
 
 if __name__ == "__main__":
@@ -104,8 +102,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    sysAuthenticators = SimpleNamespace(**pd.read_csv(AUTHENTICATORS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("etrade", False)].to_dict())
-    sysAccounts = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("etrade", False)].to_dict())
+    sysAuthenticator = SimpleNamespace(**pd.read_csv(AUTHENTICATORS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
+    sysAccount = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("alpaca", False)].to_dict())
     sysSymbols = list(map(Querys.Symbol, open(TICKERS, "r").read().splitlines()))
     random.shuffle(sysSymbols)
     sysDelayer = WebDelayer(3)

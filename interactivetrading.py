@@ -12,12 +12,10 @@ import random
 import logging
 import warnings
 import pandas as pd
-from enum import Enum
 from types import SimpleNamespace
 from attr.converters import to_bool
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
-from collections import namedtuple as ntuple
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -29,16 +27,18 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from interactive.market import InteractiveStockDownloader, InteractiveContractDownloader, InteractiveOptionDownloader
 from interactive.orders import InteractiveOrderUploader
-from interactive.subscription import InteractiveSubscription
+from interactive.source import InteractiveSource
 from finance.securities import SecurityCalculator, PricingCalculator
 from finance.strategies import StrategyCalculator
 from finance.valuations import ValuationCalculator
 from finance.prospects import ProspectCalculator
+from finance.concepts import Concepts, Querys, Strategies
 from webscraping.websupport import WebDelayer
 from support.pipelines import Producer, Processor, Consumer, Carryover
 from support.synchronize import RoutineThread
 from support.queues import Dequeuer, Queue
 from support.concepts import DateRange
+from support.filters import Filter
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -62,7 +62,7 @@ class ProspectCalculator(ProspectCalculator, Carryover, Processor, signature="(v
 class OrderUploader(InteractiveOrderUploader, Carryover, Consumer, signature="(prospects)->"): pass
 
 
-def main(*args, symbols, account, delayer, parameters={}, **kwargs):
+def main(*args, symbols, account, delayer, parameters, **kwargs):
     symbol_feed = Queue.FIFO(contents=symbols, capacity=None, timeout=None)
     stock_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
     option_pricing = lambda series: (series["ask"] * series["supply"] + series["bid"] * series["demand"]) / (series["supply"] + series["demand"])
@@ -73,7 +73,7 @@ def main(*args, symbols, account, delayer, parameters={}, **kwargs):
     value_criteria = lambda table: table["npv"] >= + 10
     cost_criteria = lambda table: table["spot"] >= - 1000
 
-    with InteractiveSubscription(host="localhost", port=7497, account=account, delayer=delayer) as source:
+    with InteractiveSource(host="localhost", port=7497, account=account, delayer=delayer) as source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
         stocks_downloader = StockDownloader(name="StockDownloader", source=source)
         contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
@@ -101,14 +101,14 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
-    sysAccounts = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("etrade", False)].to_dict())
+    sysAccount = SimpleNamespace(**pd.read_csv(ACCOUNTS, sep=r"\s+", converters={"live": to_bool}).set_index(["website", "live"], inplace=False).loc[("etrade", False)].to_dict())
     sysSymbols = list(map(Querys.Symbol, open(TICKERS, "r").read().splitlines()))
     random.shuffle(sysSymbols)
     sysDelayer = WebDelayer(3)
     sysExpiry = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*2)).date()])
     sysParameters = dict(current=Datetime.now().date(), expiry=sysExpiry, term=Concepts.Markets.Term.LIMIT, tenure=Concepts.Markets.Tenure.DAY)
     sysParameters.update({"interest": 0.05, "discount": 0.05, "fees": 1.00})
-    main(symbols=sysSymbols, accounts=sysAccounts, delayer=sysDelayer, parameters=sysParameters)
+    main(symbols=sysSymbols, account=sysAccount, delayer=sysDelayer, parameters=sysParameters)
 
 
 
