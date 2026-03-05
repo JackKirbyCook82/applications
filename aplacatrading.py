@@ -76,9 +76,9 @@ def main(*args, symbols, account, authenticator, delayer, parameters, **kwargs):
 
     with WebReader(account=account, authenticator=authenticator, delayer=delayer) as source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=source)
+        stocks_downloader = StockDownloader(name="StockDownloader", source=source, limit=25)
         contract_downloader = ContractDownloader(name="ContractDownloader", source=source)
-        options_downloader = OptionDownloader(name="OptionDownloader", source=source)
+        options_downloader = OptionDownloader(name="OptionDownloader", source=source, limit=None)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
         option_pricing = OptionPricing(name="OptionPricing", pricing=option_pricing)
         security_calculator = SecurityCalculator(name="SecurityCalculator")

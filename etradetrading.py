@@ -77,7 +77,7 @@ def main(*args, symbols, account, authenticator, delayer, parameters, **kwargs):
 
     with WebReader(service=ETradePromptService(), account=account, authenticator=authenticator, delayer=delayer) as source:
         symbols_dequeuer = SymbolDequeuer(name="SymbolDequeuer", feed=symbol_feed)
-        stocks_downloader = StockDownloader(name="StockDownloader", source=source)
+        stocks_downloader = StockDownloader(name="StockDownloader", source=source, limit=25)
         expires_downloader = ExpireDownloader(name="ExpireDownloader", source=source)
         options_downloader = OptionDownloader(name="OptionDownloader", source=source)
         stock_pricing = StockPricing(name="StockPricing", pricing=stock_pricing)
