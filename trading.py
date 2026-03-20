@@ -58,9 +58,9 @@ def main(*args, tickers, expires, interest, discount, fees, **kwargs):
     tickers = Queues.FIFO(contents=tickers, capacity=None, timeout=None)
 
     with WebReader() as source:
-        stock_downloader = AlpacaStockDownloader(source=source, authenticator=authenticators[], name="StockDownloader")
-        contract_downloader = AlpacaContractDownloader(source=source, authenticator=authenticators[], name="ContractDownloader")
-        option_downloader = AlpacaOptionDownloader(source=source, authenticator=authenticators[], name="OptionDownloader")
+        stock_downloader = AlpacaStockDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="StockDownloader")
+        contract_downloader = AlpacaContractDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="ContractDownloader")
+        option_downloader = AlpacaOptionDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="OptionDownloader")
 
         while bool(tickers):
             ticker = ticker.read()
