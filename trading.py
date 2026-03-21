@@ -10,10 +10,9 @@ import os
 import sys
 import logging
 import warnings
-from types import SimpleNamespace
-
 import pandas as pd
 from enum import Enum
+from types import SimpleNamespace
 from attr.converters import to_bool
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
@@ -29,8 +28,9 @@ ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from finance.concepts import Querys
 from webscraping.webreaders import WebReader
-from support.concepts import DateRange
+from support.concepts import DateRange, NumRange
 from support.queues import Queues
 
 __version__ = "1.0.0"
@@ -45,30 +45,33 @@ Brokerage = ntuple("Brokerage", {"website": Website, "live": bool})
 
 
 def load(file):
-    key = lambda website, live: Brokerage(Website(website), to_bool(live))
+    key = lambda website, live: Brokerage(Website[str(website).upper()], to_bool(live))
     value = lambda header, body: SimpleNamespace(**dict(zip(header, body)))
     contents = [str(line).split(" ") for line in open(file, "r").read().splitlines()]
     mapping = {key(*line[:2]): value(contents[0][2:], line[2:]) for line in contents[1:]}
     return mapping
 
 
-def main(*args, tickers, expires, interest, discount, fees, **kwargs):
+def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
     authenticators = load(AUTHENTICATORS)
     accounts = load(ACCOUNTS)
-    tickers = Queues.FIFO(contents=tickers, capacity=None, timeout=None)
+    symbols = list(map(Querys.Symbol, tickers))
+    symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
 
-    with WebReader() as source:
+    with WebReader(delay=3) as source:
         stock_downloader = AlpacaStockDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="StockDownloader")
         contract_downloader = AlpacaContractDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="ContractDownloader")
         option_downloader = AlpacaOptionDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="OptionDownloader")
 
-        while bool(tickers):
-            ticker = ticker.read()
-            stock = stock_downloader(ticker=[ticker]).squeeze()
-            contracts = contract_downloader(ticker=[ticker], expires=expires, strikes=None)
+        while bool(symbols):
+            symbol = symbols.read()
+            stock = stock_downloader(symbols=[symbol]).squeeze()
+            strikes = NumRange([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
+            contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
 
-
+            print(options)
+            raise Exception()
 
 
 if __name__ == "__main__":
@@ -80,6 +83,7 @@ if __name__ == "__main__":
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
     parameters["expires"] = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*2)).date()])
+    parameters["strikes"] = NumRange([0.80, 1.20])
     parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00})
     main(*arguments, **parameters)
 
