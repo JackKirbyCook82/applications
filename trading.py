@@ -10,10 +10,13 @@ import os
 import sys
 import logging
 import warnings
+
+import numpy as np
 import pandas as pd
 from enum import Enum
 from types import SimpleNamespace
 from attr.converters import to_bool
+from datetime import date as Date
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
@@ -28,6 +31,7 @@ ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from finance.options import SanityFilter, ViabilityFilter
 from finance.concepts import Querys
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
@@ -62,13 +66,20 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
         stock_downloader = AlpacaStockDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="StockDownloader")
         contract_downloader = AlpacaContractDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="ContractDownloader")
         option_downloader = AlpacaOptionDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="OptionDownloader")
+        sanity_filter = SanityFilter(name="SanityFilter")
+        viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
 
         while bool(symbols):
             symbol = symbols.read()
             stock = stock_downloader(symbols=[symbol]).squeeze()
+            stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
+            stock["median"] = (stock["bid"] + stock["ask"]) / 2
             strikes = NumRange([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
+            options["underlying"] = stock["median"]
+            options = sanity_filter(options=options)
+            options = viability_filter(options=options)
 
             print(options)
             raise Exception()
@@ -82,8 +93,8 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
-    parameters["expires"] = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*2)).date()])
-    parameters["strikes"] = NumRange([0.80, 1.20])
+    parameters["expires"] = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*3/12)).date()])
+    parameters["strikes"] = NumRange([0.95, 1.05])
     parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00})
     main(*arguments, **parameters)
 
