@@ -11,12 +11,10 @@ import sys
 import logging
 import warnings
 
-import numpy as np
 import pandas as pd
 from enum import Enum
 from types import SimpleNamespace
 from attr.converters import to_bool
-from datetime import date as Date
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
@@ -31,7 +29,6 @@ ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
-from finance.options import SanityFilter, ViabilityFilter
 from finance.concepts import Querys
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
@@ -66,8 +63,6 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
         stock_downloader = AlpacaStockDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="StockDownloader")
         contract_downloader = AlpacaContractDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="ContractDownloader")
         option_downloader = AlpacaOptionDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="OptionDownloader")
-        sanity_filter = SanityFilter(name="SanityFilter")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -78,8 +73,6 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
             options["underlying"] = stock["median"]
-            options = sanity_filter(options=options)
-            options = viability_filter(options=options)
 
             print(options)
             raise Exception()
