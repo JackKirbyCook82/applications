@@ -69,7 +69,7 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
             stock = stock_downloader(symbols=[symbol]).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
-            strikes = NumRange([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
+            strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
             options["underlying"] = stock["median"]
@@ -86,8 +86,8 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
-    parameters["expires"] = DateRange([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*3/12)).date()])
-    parameters["strikes"] = NumRange([0.95, 1.05])
+    parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*3/12)).date()])
+    parameters["strikes"] = NumRange.create([0.95, 1.05])
     parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00})
     main(*arguments, **parameters)
 
