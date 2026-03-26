@@ -29,6 +29,7 @@ ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from alpaca.history import AlpacaBarsDownloader
 from finance.options import SanityFilter, ViabilityFilter, OptionCalculator
 from finance.greeks import GreekCalculator
 from finance.implied import ImpliedCalculator
@@ -56,13 +57,14 @@ def load(file):
     return mapping
 
 
-def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
+def main(*args, tickers, history, expires, strikes, interest, discount, fees, **kwargs):
     authenticators = load(AUTHENTICATORS)
     accounts = load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
 
     with WebReader(delay=3) as source:
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticators=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -74,6 +76,7 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
 
         while bool(symbols):
             symbol = symbols.read()
+            bars = bars_downloader(symbols=[symbol], history=history)
             stock = stock_downloader(symbols=[symbol]).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
@@ -81,6 +84,7 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
             options["underlying"] = stock["median"]
+            options["price"] = options["median"]
 
             print(options)
             raise Exception()
@@ -104,7 +108,10 @@ if __name__ == "__main__":
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*3/12)).date()])
+    parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() + Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
     parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00})
     main(*arguments, **parameters)
+
+
 
