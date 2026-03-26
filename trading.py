@@ -29,6 +29,9 @@ ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
 TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from finance.options import SanityFilter, ViabilityFilter, OptionCalculator
+from finance.greeks import GreekCalculator
+from finance.implied import ImpliedCalculator
 from finance.concepts import Querys
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
@@ -60,9 +63,14 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
 
     with WebReader(delay=3) as source:
-        stock_downloader = AlpacaStockDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="StockDownloader")
-        contract_downloader = AlpacaContractDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="ContractDownloader")
-        option_downloader = AlpacaOptionDownloader(source=source, authenticator=authenticators[Website.ALPACA, False], name="OptionDownloader")
+        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
+        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
+        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
+        sanity_filter = SanityFilter(name="SanityFilter")
+        viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
+        option_calculator = OptionCalculator(name="OptionCalculator")
+        greek_calculator = GreekCalculator(name="GreekCalculator")
+        implied_calculator = ImpliedCalculator(name="ImpliedCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -73,6 +81,15 @@ def main(*args, tickers, expires, strikes, interest, discount, fees, **kwargs):
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
             options["underlying"] = stock["median"]
+
+            print(options)
+            raise Exception()
+
+            options = sanity_filter(options=options)
+            options = viability_filter(options=options)
+            options = option_calculator(options=options, interest=interest)
+            options = greek_calculator(options=options, interest=interest)
+            options = implied_calculator(options=options, interest=interest)
 
             print(options)
             raise Exception()
