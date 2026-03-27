@@ -8,6 +8,7 @@ Created on Weds Mar 18 2026
 
 import os
 import sys
+import random
 import logging
 import warnings
 
@@ -30,10 +31,11 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
+from finance.technicals import TechnicalCalculator
 from finance.options import SanityFilter, ViabilityFilter, OptionCalculator
 from finance.greeks import GreekCalculator
 from finance.implied import ImpliedCalculator
-from finance.concepts import Querys
+from finance.concepts import Concepts, Querys
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
 from support.queues import Queues
@@ -57,26 +59,35 @@ def load(file):
     return mapping
 
 
-def main(*args, tickers, history, expires, strikes, interest, discount, fees, **kwargs):
-    authenticators = load(AUTHENTICATORS)
-    accounts = load(ACCOUNTS)
+def main(*args, tickers, history, expires, strikes, interest, discount, fees, period, **kwargs):
+    technicals = [Concepts.Technicals.State.BARS, Concepts.Technicals.State.STATS, Concepts.Technicals.Trend.MACD, Concepts.Technicals.Volatility.RSI]
+    pricing = lambda dataframe: (dataframe["mean"] + dataframe["median"]) / 2
+    authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
+    random.shuffle(symbols)
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
 
     with WebReader(delay=3) as source:
-        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticators=authenticators[Website.ALPACA, False])
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
         viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
-        option_calculator = OptionCalculator(name="OptionCalculator")
+        option_calculator = OptionCalculator(name="OptionCalculator", pricing=pricing)
         greek_calculator = GreekCalculator(name="GreekCalculator")
         implied_calculator = ImpliedCalculator(name="ImpliedCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
 
         while bool(symbols):
             symbol = symbols.read()
             bars = bars_downloader(symbols=[symbol], history=history)
+            technicals = technical_calculator(bars=bars, period=period)
+
+            print(bars, "\n")
+            print(technicals, "\n")
+            raise Exception()
+
             stock = stock_downloader(symbols=[symbol]).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
@@ -84,13 +95,16 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, **
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
             options["underlying"] = stock["median"]
-            options["price"] = options["median"]
 
-            print(options)
+            print(options, "\n")
             raise Exception()
 
             options = sanity_filter(options=options)
             options = viability_filter(options=options)
+
+            print(options)
+            raise Exception()
+
             options = option_calculator(options=options, interest=interest)
             options = greek_calculator(options=options, interest=interest)
             options = implied_calculator(options=options, interest=interest)
@@ -107,10 +121,10 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
-    parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*3/12)).date()])
-    parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() + Timedelta(days=1)).date()])
+    parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
+    parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*1)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
-    parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00})
+    parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00, "period": 252})
     main(*arguments, **parameters)
 
 
