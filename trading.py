@@ -60,7 +60,6 @@ def load(file):
 
 
 def main(*args, tickers, history, expires, strikes, interest, discount, fees, period, **kwargs):
-    technicals = [Concepts.Technicals.State.BARS, Concepts.Technicals.State.STATS, Concepts.Technicals.Trend.MACD, Concepts.Technicals.Volatility.RSI]
     pricing = lambda dataframe: (dataframe["mean"] + dataframe["median"]) / 2
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
@@ -68,11 +67,9 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
 
     with WebReader(delay=3) as source:
-        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
         viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
         option_calculator = OptionCalculator(name="OptionCalculator", pricing=pricing)
@@ -81,13 +78,6 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
 
         while bool(symbols):
             symbol = symbols.read()
-            bars = bars_downloader(symbols=[symbol], history=history)
-            technicals = technical_calculator(bars=bars, period=period)
-
-            print(bars, "\n")
-            print(technicals, "\n")
-            raise Exception()
-
             stock = stock_downloader(symbols=[symbol]).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
