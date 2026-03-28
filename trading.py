@@ -85,17 +85,13 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts=contracts)
             options["underlying"] = stock["median"]
-
-            print(options, "\n")
-            raise Exception()
-
             options = sanity_filter(options=options)
             options = viability_filter(options=options)
+            options = option_calculator(options=options, interest=interest)
 
             print(options)
             raise Exception()
 
-            options = option_calculator(options=options, interest=interest)
             options = greek_calculator(options=options, interest=interest)
             options = implied_calculator(options=options, interest=interest)
 
