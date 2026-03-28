@@ -87,11 +87,11 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options["underlying"] = stock["median"]
             options = sanity_filter(options=options)
             options = viability_filter(options=options)
-            options = option_calculator(options=options, interest=interest)
 
             print(options)
             raise Exception()
 
+            options = option_calculator(options=options, interest=interest)
             options = greek_calculator(options=options, interest=interest)
             options = implied_calculator(options=options, interest=interest)
 
