@@ -63,13 +63,14 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
     symbols = list(map(Querys.Symbol, tickers))
     random.shuffle(symbols)
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
+    technicals = [Concepts.Technicals.State.STATS, Concepts.Technicals.Trend.MACD, Concepts.Technicals.Volatility.ATR]
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
         viability_filter = ViabilityFilter(name="ViabilityFilter")
         option_calculator = OptionCalculator(name="OptionCalculator")
@@ -87,9 +88,6 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options = option_downloader(contracts)
             options["underlying"] = stock["median"]
             technicals = technical_calculator(bars, period=period)
-
-            print(technicals)
-
             options = sanity_filter(options)
             options = viability_filter(options, spread=0.25, size=2)
             options = option_calculator(options, interest=interest)
