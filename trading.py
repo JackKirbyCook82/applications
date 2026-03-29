@@ -11,7 +11,6 @@ import sys
 import random
 import logging
 import warnings
-
 import pandas as pd
 from enum import Enum
 from types import SimpleNamespace
@@ -60,38 +59,44 @@ def load(file):
 
 
 def main(*args, tickers, history, expires, strikes, interest, discount, fees, period, **kwargs):
-    pricing = lambda dataframe: (dataframe["mean"] + dataframe["median"]) / 2
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     random.shuffle(symbols)
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
 
     with WebReader(delay=3) as source:
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator")
         sanity_filter = SanityFilter(name="SanityFilter")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
-        option_calculator = OptionCalculator(name="OptionCalculator", pricing=pricing)
+        viability_filter = ViabilityFilter(name="ViabilityFilter")
+        option_calculator = OptionCalculator(name="OptionCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         implied_calculator = ImpliedCalculator(name="ImpliedCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
 
         while bool(symbols):
             symbol = symbols.read()
-            stock = stock_downloader(symbols=[symbol]).squeeze()
+            bars = bars_downloader([symbol], history=history)
+            stock = stock_downloader([symbol]).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
-            contracts = contract_downloader(symbols=[symbol], expires=expires, strikes=strikes)
-            options = option_downloader(contracts=contracts)
+            contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
+            options = option_downloader(contracts)
             options["underlying"] = stock["median"]
-            options = sanity_filter(options=options)
-            options = viability_filter(options=options)
+            technicals = technical_calculator(bars, period=period)
+
+            print(technicals)
+
+            options = sanity_filter(options)
+            options = viability_filter(options, spread=0.25, size=2)
+            options = option_calculator(options, interest=interest)
 
             print(options)
             raise Exception()
 
-            options = option_calculator(options=options, interest=interest)
             options = greek_calculator(options=options, interest=interest)
             options = implied_calculator(options=options, interest=interest)
 
