@@ -92,8 +92,8 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options = viability_filter(options, spread=0.25, size=2)
             options = option_calculator(options, interest=interest)
 
+            print(technicals)
             print(options)
-            raise Exception()
 
             options = greek_calculator(options=options, interest=interest)
             options = implied_calculator(options=options, interest=interest)
