@@ -58,12 +58,20 @@ def load(file):
     return mapping
 
 
+def merge(stocks, technicals):
+    technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
+    technicals = technicals.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).last()
+    technicals = technicals[["ticker", "date", "volatility", "trend"]]
+    stocks = stocks.merge(technicals, on="ticker", how="left")
+    return stocks
+
+
 def main(*args, tickers, history, expires, strikes, interest, discount, fees, period, **kwargs):
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     random.shuffle(symbols)
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
-    technicals = [Concepts.Technicals.State.STATS, Concepts.Technicals.Trend.MACD, Concepts.Technicals.Volatility.ATR]
+    technicals = [Concepts.Technicals.State.STATS]
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -80,22 +88,27 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
         while bool(symbols):
             symbol = symbols.read()
             bars = bars_downloader([symbol], history=history)
-            stock = stock_downloader([symbol]).squeeze()
+            stocks = stock_downloader([symbol])
+            technicals = technical_calculator(bars, period=period)
+            stock = merge(stocks, technicals).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts)
             options["underlying"] = stock["median"]
-            technicals = technical_calculator(bars, period=period)
+            options["volatility"] = stock["volatility"]
             options = sanity_filter(options)
             options = viability_filter(options, spread=0.25, size=2)
             options = option_calculator(options, interest=interest)
 
-            print(technicals)
             print(options)
 
             options = greek_calculator(options=options, interest=interest)
+
+            print(options)
+            raise Exception()
+
             options = implied_calculator(options=options, interest=interest)
 
             print(options)
@@ -111,7 +124,7 @@ if __name__ == "__main__":
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
-    parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*1)).date(), (Datetime.today() - Timedelta(days=1)).date()])
+    parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
     parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00, "period": 252})
     main(*arguments, **parameters)
