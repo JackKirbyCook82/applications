@@ -101,16 +101,13 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options = sanity_filter(options)
             options = viability_filter(options, spread=0.25, size=2)
             options = option_calculator(options, interest=interest)
-            options = greek_calculator(options=options, interest=interest)
-
-            options.to_csv(os.path.join(REPOSITORY, "option_greeks.txt"))
-            print(options)
-            raise Exception()
-
             options = implied_calculator(options=options, interest=interest)
 
+#            options.to_csv(os.path.join(REPOSITORY, "option_greeks.txt"))
             print(options)
             raise Exception()
+
+            options = greek_calculator(options=options, interest=interest)
 
 
 if __name__ == "__main__":
