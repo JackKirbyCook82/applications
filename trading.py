@@ -32,8 +32,9 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from alpaca.history import AlpacaBarsDownloader
 from finance.technicals import TechnicalCalculator
 from finance.options import SanityFilter, ViabilityFilter, OptionCalculator
+from finance.volatility import VolatilityCalculator
+from finance.valuation import ValuationCalculator
 from finance.greeks import GreekCalculator
-from finance.implied import ImpliedCalculator
 from finance.concepts import Concepts, Querys
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
@@ -82,8 +83,9 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
         sanity_filter = SanityFilter(name="SanityFilter")
         viability_filter = ViabilityFilter(name="ViabilityFilter")
         option_calculator = OptionCalculator(name="OptionCalculator")
+        volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        implied_calculator = ImpliedCalculator(name="ImpliedCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -101,13 +103,14 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options = sanity_filter(options)
             options = viability_filter(options, spread=0.25, size=2)
             options = option_calculator(options, interest=interest)
-            options = implied_calculator(options=options, interest=interest)
+            options = volatility_calculator(options, interest=interest)
 
-#            options.to_csv(os.path.join(REPOSITORY, "option_greeks.txt"))
+#            options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
             raise Exception()
 
-            options = greek_calculator(options=options, interest=interest)
+            options = valuation_calculator(options, interest=interest)
+            options = greek_calculator(options, interest=interest)
 
 
 if __name__ == "__main__":
