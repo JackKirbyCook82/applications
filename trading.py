@@ -104,13 +104,14 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options = viability_filter(options, spread=0.25, size=2)
             options = option_calculator(options, interest=interest)
             options = volatility_calculator(options, interest=interest)
+            options = valuation_calculator(options, interest=interest)
+            options = greek_calculator(options, interest=interest)
 
-#            options.to_csv(os.path.join(REPOSITORY, "options.txt"))
+            options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
             raise Exception()
 
-            options = valuation_calculator(options, interest=interest)
-            options = greek_calculator(options, interest=interest)
+
 
 
 if __name__ == "__main__":
