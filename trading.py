@@ -30,14 +30,15 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
-from finance.technicals import TechnicalCalculator
-from finance.options import SanityFilter, ViabilityFilter, OptionCalculator
-from finance.volatility import VolatilityCalculator
-from finance.valuation import ValuationCalculator
-from finance.greeks import GreekCalculator
-from finance.concepts import Concepts, Querys
+from stocks.technicals import TechnicalCalculator
+from options.market import SanityFilter, ViabilityFilter, MarketCalculator
+from options.volatility import VolatilityCalculator
+from options.valuations import ValuationCalculator
+from options.forward import ForwardCalculator, ForwardHyperparams
+from options.greeks import GreekCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
+from support.finance import Concepts, Querys
 from support.queues import Queues
 
 __version__ = "1.0.0"
@@ -82,7 +83,8 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
         viability_filter = ViabilityFilter(name="ViabilityFilter")
-        option_calculator = OptionCalculator(name="OptionCalculator")
+        market_calculator = MarketCalculator(name="MarketCalculator")
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=ForwardHyperparams.Weights.SQRT)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -102,7 +104,8 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options["volatility"] = stock["volatility"]
             options = sanity_filter(options)
             options = viability_filter(options, spread=0.25, size=2)
-            options = option_calculator(options, interest=interest)
+            options = market_calculator(options, interest=interest)
+            options = forward_calculator(options)
             options = volatility_calculator(options, interest=interest)
             options = valuation_calculator(options, interest=interest)
             options = greek_calculator(options, interest=interest)
@@ -119,7 +122,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["tickers"] = open(TICKERS, "r").read().splitlines()
+#    parameters["tickers"] = open(TICKERS, "r").read().splitlines()
+    parameters["tickers"] = ["NIO"]
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
