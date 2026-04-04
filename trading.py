@@ -112,8 +112,6 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             raise Exception()
 
 
-
-
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
     warnings.filterwarnings("ignore")
