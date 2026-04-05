@@ -11,6 +11,7 @@ import sys
 import random
 import logging
 import warnings
+import numpy as np
 import pandas as pd
 from enum import Enum
 from types import SimpleNamespace
@@ -34,7 +35,7 @@ from stocks.technicals import TechnicalCalculator
 from options.market import SanityFilter, ViabilityFilter, MarketCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
-from options.forward import ForwardCalculator, ForwardHyperparams
+from options.forward import ForwardCalculator
 from options.greeks import GreekCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
@@ -68,12 +69,13 @@ def merge(stocks, technicals):
     return stocks
 
 
-def main(*args, tickers, history, expires, strikes, interest, discount, fees, period, **kwargs):
+def main(*args, tickers, history, expires, strikes, period, **kwargs):
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     random.shuffle(symbols)
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
+    weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -82,9 +84,9 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
-        viability_filter = ViabilityFilter(name="ViabilityFilter")
+        viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
         market_calculator = MarketCalculator(name="MarketCalculator")
-        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=ForwardHyperparams.Weights.SQRT)
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -103,16 +105,17 @@ def main(*args, tickers, history, expires, strikes, interest, discount, fees, pe
             options["underlying"] = stock["median"]
             options["volatility"] = stock["volatility"]
             options = sanity_filter(options)
-            options = viability_filter(options, spread=0.25, size=2)
-            options = market_calculator(options, interest=interest)
+            options = viability_filter(options)
+            options = market_calculator(options)
             options = forward_calculator(options)
-            options = volatility_calculator(options, interest=interest)
-            options = valuation_calculator(options, interest=interest)
-            options = greek_calculator(options, interest=interest)
 
             options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
             raise Exception()
+
+            options = volatility_calculator(options)
+            options = valuation_calculator(options)
+            options = greek_calculator(options)
 
 
 if __name__ == "__main__":
@@ -127,7 +130,7 @@ if __name__ == "__main__":
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
-    parameters.update({"interest": 0.05, "discount": 0.05, "fees": 3.00, "period": 252})
+    parameters.update({"period": 252})
     main(*arguments, **parameters)
 
 
