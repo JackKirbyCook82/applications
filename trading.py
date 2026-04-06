@@ -69,13 +69,13 @@ def merge(stocks, technicals):
     return stocks
 
 
-def main(*args, tickers, history, expires, strikes, period, **kwargs):
+def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
+    weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
+    spreads = lambda spread, underlying: spread <= 0.05 * underlying
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
-    random.shuffle(symbols)
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
-    weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -84,9 +84,9 @@ def main(*args, tickers, history, expires, strikes, period, **kwargs):
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", spread=0.25, size=2)
         market_calculator = MarketCalculator(name="MarketCalculator")
-        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", size=2, money=0.10, tight=0.25)
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -105,8 +105,8 @@ def main(*args, tickers, history, expires, strikes, period, **kwargs):
             options["underlying"] = stock["median"]
             options["volatility"] = stock["volatility"]
             options = sanity_filter(options)
-            options = viability_filter(options)
             options = market_calculator(options)
+            options = viability_filter(options)
             options = forward_calculator(options)
 
             options.to_csv(os.path.join(REPOSITORY, "options.txt"))
@@ -125,12 +125,12 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-#    parameters["tickers"] = open(TICKERS, "r").read().splitlines()
-    parameters["tickers"] = ["NIO"]
+    parameters["tickers"] = open(TICKERS, "r").read().splitlines()
+    random.shuffle(parameters["tickers"])
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
-    parameters.update({"period": 252})
+    parameters.update({"period": 252, "interest": np.log10(1 + 0.05)})
     main(*arguments, **parameters)
 
 
