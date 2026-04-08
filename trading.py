@@ -85,7 +85,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
         market_calculator = MarketCalculator(name="MarketCalculator")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", size=2, money=0.10, tight=0.25)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", size=1, money=None, tight=None)
         forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
@@ -108,12 +108,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
             options = market_calculator(options)
             options = viability_filter(options)
             options = forward_calculator(options)
+            options = volatility_calculator(options, interest=interest)
 
             options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
             raise Exception()
 
-            options = volatility_calculator(options)
             options = valuation_calculator(options)
             options = greek_calculator(options)
 
