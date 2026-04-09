@@ -32,7 +32,7 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
 from stocks.technicals import TechnicalCalculator
-from options.market import SanityFilter, ViabilityFilter, MarketCalculator
+from options import SanityFilter, ViabilityFilter, MarketCalculator, MoneyCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forward import ForwardCalculator
@@ -71,7 +71,7 @@ def merge(stocks, technicals):
 
 def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
     weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
-    spreads = lambda spread, underlying: spread <= 0.05 * underlying
+    spreads = lambda spread, spot: spread <= 0.05 * spot
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
@@ -85,8 +85,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
         market_calculator = MarketCalculator(name="MarketCalculator")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", size=1, money=None, tight=None)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", size=1, money=0.20, tight=0.20)
         forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads)
+        money_calculator = MoneyCalculator(name="MoneyCalculator")
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -102,20 +103,21 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts)
-            options["underlying"] = stock["median"]
             options["volatility"] = stock["volatility"]
+            options["spot"] = stock["median"]
             options = sanity_filter(options)
             options = market_calculator(options)
             options = viability_filter(options)
             options = forward_calculator(options)
+            options = valuation_calculator(options, interest=interest)
             options = volatility_calculator(options, interest=interest)
+            options = money_calculator(options)
 
             options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
             raise Exception()
 
-            options = valuation_calculator(options)
-            options = greek_calculator(options)
+            options = greek_calculator(options, interest=interest)
 
 
 if __name__ == "__main__":
