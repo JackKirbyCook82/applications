@@ -32,7 +32,7 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
 from stocks.technicals import TechnicalCalculator
-from options import SanityFilter, ViabilityFilter, MarketCalculator, MoneyCalculator
+from options import SanityFilter, ViabilityFilter, OptionCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forward import ForwardCalculator
@@ -84,10 +84,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
-        market_calculator = MarketCalculator(name="MarketCalculator")
+        option_calculator = OptionCalculator(name="OptionCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", size=1, money=0.20, tight=0.20)
         forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads)
-        money_calculator = MoneyCalculator(name="MoneyCalculator")
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -106,18 +105,16 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
             options = sanity_filter(options)
-            options = market_calculator(options)
+            options = option_calculator(options)
             options = viability_filter(options)
             options = forward_calculator(options)
             options = valuation_calculator(options, interest=interest)
             options = volatility_calculator(options, interest=interest)
-            options = money_calculator(options)
+            options = greek_calculator(options, interest=interest)
 
             options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
             raise Exception()
-
-            options = greek_calculator(options, interest=interest)
 
 
 if __name__ == "__main__":
