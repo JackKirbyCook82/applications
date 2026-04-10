@@ -69,7 +69,7 @@ def merge(stocks, technicals):
     return stocks
 
 
-def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
+def main(*args, tickers, history, expires, strikes, period, interest, dividend, **kwargs):
     weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
     spreads = lambda spread, spot: spread <= 0.05 * spot
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
@@ -108,9 +108,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, **kwargs):
             options = option_calculator(options)
             options = viability_filter(options)
             options = forward_calculator(options)
-            options = valuation_calculator(options, interest=interest)
-            options = volatility_calculator(options, interest=interest)
-            options = greek_calculator(options, interest=interest)
+            options = valuation_calculator(options, interest=interest, dividend=dividend)
+            options = volatility_calculator(options, interest=interest, dividend=dividend)
+            options = greek_calculator(options, interest=interest, dividend=dividend)
 
             options.to_csv(os.path.join(REPOSITORY, "options.txt"))
             print(options)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
-    parameters.update({"period": 252, "interest": np.log10(1 + 0.05)})
+    parameters.update({"period": 252, "interest": np.log10(1 + 0.05), "dividend": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
 
 
