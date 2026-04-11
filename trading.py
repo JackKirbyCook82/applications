@@ -86,7 +86,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividend, 
         sanity_filter = SanityFilter(name="SanityFilter")
         option_calculator = OptionCalculator(name="OptionCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", size=1, money=0.20, tight=0.20)
-        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads)
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads, samplesize=5)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
