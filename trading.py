@@ -32,10 +32,10 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
 from stocks.technicals import TechnicalCalculator
-from options import SanityFilter, ViabilityFilter, OptionCalculator
+from options.markets import MarketCalculator, SanityFilter, ViabilityFilter
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
-from options.forward import ForwardCalculator
+from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.surface import SurfaceCalculator
 from webscraping.webreaders import WebReader
@@ -85,7 +85,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         sanity_filter = SanityFilter(name="SanityFilter")
-        option_calculator = OptionCalculator(name="OptionCalculator")
+        market_calculator = MarketCalculator(name="MarketCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", size=1, money=0.20, tight=0.20)
         forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, spreads=spreads, samplesize=5)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
@@ -107,7 +107,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
             options = sanity_filter(options)
-            options = option_calculator(options)
+            options = market_calculator(options)
             options = viability_filter(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
             options = valuation_calculator(options, interest=interest, dividends=dividends)
