@@ -92,7 +92,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
-        surface_create = SurfaceCreator(name="SurfaceCreator", samplesize=5, gridsize=100, curvetype="natural", degree=(3, 3))
+        surface_creator = SurfaceCreator(name="SurfaceCreator", samplesize=5, gridsize=100, curvetype="natural", degree=(3, 3))
         surface_plotter = SurfacePlotter(name="SurfacePlotter", figsize=(10, 10), gridsize=100)
 
         while bool(symbols):
@@ -116,6 +116,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
+            surface = surface_creator(options)
+            surface_plotter(options, surface)
 
             print(options)
             raise Exception()
