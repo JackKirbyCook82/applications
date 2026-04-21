@@ -37,7 +37,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.surface import SurfaceCalculator, SurfaceCreator, SurfacePlotter
+from options.surface import SurfaceCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
@@ -92,8 +92,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
-        surface_creator = SurfaceCreator(name="SurfaceCreator", samplesize=5, gridsize=100, curvetype="natural", degree=(2, 3), smoothing=1e-2)
-        surface_plotter = SurfacePlotter(name="SurfacePlotter", figsize=(10, 10), gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -116,9 +114,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
-            surface = surface_creator(options)
 
-            surface_plotter(options, surface)
             print(options)
             raise Exception()
 
