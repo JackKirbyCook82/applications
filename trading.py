@@ -37,9 +37,10 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.surface import SurfaceCalculator
+from options.surface import SurfaceCalculator, SurfacePlotter
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
+from support.surface import Surfaces, Curvature, Axes
 from support.finance import Concepts, Querys
 from support.queues import Queues
 
@@ -92,6 +93,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
+        surface_plotter = SurfacePlotter(name="SurfacePlotter", layout=(2, 1), plotsize=8, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -115,7 +117,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
 
-            print(options)
+            options = options[["tau", "mae", "tiv"]].dropna(how="any", inplace=False)
+            hyperparams = dict(smoothing=1e-3, degree=Axes(x=2, y=2), gridsize=100, samplesize=5)
+            regressive = Surfaces.Regressive(options["tau"], options["mae"], options["tiv"], weights=options["quality"], **hyperparams)
+            interpolative = Surfaces.Interpolative(options["tau"], options["mae"], options["tiv"], curvature=Curvature.INTERPOLATIVE, **hyperparams)
+
+            surface_plotter(options, surfaces=[regressive, interpolative])
             raise Exception()
 
 
