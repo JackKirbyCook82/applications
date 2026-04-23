@@ -8,7 +8,6 @@ Created on Weds Mar 18 2026
 
 import os
 import sys
-import random
 import logging
 import warnings
 import numpy as np
@@ -37,10 +36,10 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.surface import SurfaceCalculator, SurfacePlotter
+from options.surface import SurfaceCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
-from support.surface import Surfaces, Curvature, Axes
+from support.surface import Screener, Plotter, Surfaces, Curvature, Axes
 from support.finance import Concepts, Querys
 from support.queues import Queues
 
@@ -93,7 +92,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
-        surface_plotter = SurfacePlotter(name="SurfacePlotter", layout=(2, 1), plotsize=8, gridsize=100)
+        surface_screener = Screener(name="SurfaceScreener", smoothing=1e-4, degree=Axes(x=3, y=3), htreshold=6)
+        surface_plotter = Plotter(name="SurfacePlotter", plotcount=4, plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -117,12 +117,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
 
-            options = options[["tau", "mae", "tiv"]].dropna(how="any", inplace=False)
-            hyperparams = dict(smoothing=1e-3, degree=Axes(x=2, y=2), gridsize=100, samplesize=5)
-            regressive = Surfaces.Regressive(options["tau"], options["mae"], options["tiv"], weights=options["quality"], **hyperparams)
-            interpolative = Surfaces.Interpolative(options["tau"], options["mae"], options["tiv"], curvature=Curvature.INTERPOLATIVE, **hyperparams)
-
-            surface_plotter(options, surfaces=[regressive, interpolative])
+            scatter = options[["tau", "mae", "tiv"]].remame({"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
+            hyperparams = dict(smoothing=1e-4, degree=Axes(x=3, y=3), gridsize=100, samplesize=5)
+            scatter = surface_screener(scatter, **hyperparams)
+            surfaces = [(Surfaces.Regressive, None)] + [(Surfaces.Interpolative, curvature) for curvature in iter(Curvature)]
+            surfaces = [cls(scatter, curvature=curvature, **hyperparams) for (cls, curvature) in surfaces]
+            surface_plotter(scatter, surfaces=surfaces, **hyperparams)
             raise Exception()
 
 
@@ -134,7 +134,6 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["tickers"] = open(TICKERS, "r").read().splitlines()
-    random.shuffle(parameters["tickers"])
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
