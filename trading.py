@@ -92,8 +92,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
-        surface_screener = Screener(name="SurfaceScreener", smoothing=1e-4, degree=Axes(x=3, y=3), htreshold=6)
-        surface_plotter = Plotter(name="SurfacePlotter", plotcount=4, plotsize=5, gridsize=100)
+        surface_screener = Screener(name="SurfaceScreener", neighbors=12, threshold=6)
+        surface_plotter = Plotter(name="SurfacePlotter", plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -117,7 +117,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
 
-            scatter = options[["tau", "mae", "tiv"]].remame({"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
+            scatter = options[["tau", "mae", "tiv"]].remame(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
             hyperparams = dict(smoothing=1e-4, degree=Axes(x=3, y=3), gridsize=100, samplesize=5)
             scatter = surface_screener(scatter, **hyperparams)
             surfaces = [(Surfaces.Regressive, None)] + [(Surfaces.Interpolative, curvature) for curvature in iter(Curvature)]
