@@ -39,8 +39,9 @@ from options.greeks import GreekCalculator
 from options.surface import SurfaceCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
-from support.surface import Screener, Plotter, Surfaces, Curvature, Axes
+from support.surface import SurfaceScreener, SurfaceCreator, Methods
 from support.finance import Concepts, Querys
+from support.plotters import Plotter, Plot
 from support.queues import Queues
 
 __version__ = "1.0.0"
@@ -92,8 +93,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
-        surface_screener = Screener(name="SurfaceScreener", neighbors=12, threshold=6)
-        surface_plotter = Plotter(name="SurfacePlotter", plotsize=5, gridsize=100)
+        surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
+        surface_creator = SurfaceCreator(name="SurfaceCreator", surface=Methods.Surface.REGRESSION, smoothing=1e-4, degree=(3, 3), gridsize=100, samplesize=5)
+        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -117,12 +119,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
 
-            scatter = options[["tau", "mae", "tiv"]].remame(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
-            hyperparams = dict(smoothing=1e-4, degree=Axes(x=3, y=3), gridsize=100, samplesize=5)
-            scatter = surface_screener(scatter, **hyperparams)
-            surfaces = [(Surfaces.Regressive, None)] + [(Surfaces.Interpolative, curvature) for curvature in iter(Curvature)]
-            surfaces = [cls(scatter, curvature=curvature, **hyperparams) for (cls, curvature) in surfaces]
-            surface_plotter(scatter, surfaces=surfaces, **hyperparams)
+            scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
+            scatter = surface_screener(scatter)
+            surface = surface_creator(scatter)
+            plots = Plot(scatter=(scatter, "red"), labels=("t", "k", "w"))
+            option_plotter(plots)
             raise Exception()
 
 
