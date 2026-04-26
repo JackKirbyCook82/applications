@@ -120,6 +120,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
 
+            # ASK CHATGPT FOR SUGGESTIONS ON TUNING ONE OF THESE SURFACES TO FOLLOWING THE SCATTER BETTER
+            # COMPILE A LIST OF ALL HYPERPARAMS AND ASK CHATGPT TO SUGGEST LIMITS TO TEST
+            # WE WANT A SMOOTH MODEST CURVE FIRST, SCREEN OUT HEAVY TO ACHIEVE
+
             scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
             scatter = surface_screener(scatter)
             surfaces = surface_creator(scatter)
