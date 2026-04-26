@@ -77,6 +77,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
+    surfaces = [Methods.Surfaces.REGRESSION] + [(Methods.Surfaces.INTERPOLATIVE, curve) for curve in iter(Methods.Curves)]
     technicals = [Concepts.Technicals.State.STATS]
 
     with WebReader(delay=3) as source:
@@ -94,8 +95,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
         surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
-        surface_creator = SurfaceCreator(name="SurfaceCreator", surface=Methods.Surface.REGRESSION, smoothing=1e-4, degree=(3, 3), gridsize=100, samplesize=5)
-        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
+        surface_creator = SurfaceCreator(name="SurfaceCreator", surfaces=surfaces, smoothing=1e-4, degree=(3, 3), gridsize=100, samplesize=5)
+        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100, labels=1)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -121,8 +122,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
 
             scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
             scatter = surface_screener(scatter)
-            surface = surface_creator(scatter)
-            plots = Plot(scatter=(scatter, "red"), labels=("t", "k", "w"))
+            surfaces = surface_creator(scatter)
+            plots = [Plot(scatter=(scatter, "blue"), labels=("t", "k", "w"))] + [Plot(surface=(surface, "blue"), labels=("t", "k", "w")) for surface in surfaces]
             option_plotter(plots)
             raise Exception()
 
