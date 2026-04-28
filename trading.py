@@ -39,7 +39,7 @@ from options.greeks import GreekCalculator
 from options.surface import SurfaceCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
-from support.surface import SurfaceScreener, SurfaceCreator, Methods
+from support.surface import SurfaceScreener, SurfaceCreator
 from support.finance import Concepts, Querys
 from support.plotters import Plotter, Plot
 from support.queues import Queues
@@ -77,7 +77,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
-    surfaces = [Methods.Surfaces.REGRESSION] + [(Methods.Surfaces.INTERPOLATIVE, curve) for curve in iter(Methods.Curves)]
     technicals = [Concepts.Technicals.State.STATS]
 
     with WebReader(delay=3) as source:
@@ -95,7 +94,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
         surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
-        surface_creator = SurfaceCreator(name="SurfaceCreator", surfaces=surfaces, smoothing=1e-4, degree=(3, 3), gridsize=100, samplesize=5)
+        surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
         option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100, labels=1)
 
         while bool(symbols):
@@ -120,14 +119,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
 
-            # ASK CHATGPT FOR SUGGESTIONS ON TUNING ONE OF THESE SURFACES TO FOLLOWING THE SCATTER BETTER
-            # COMPILE A LIST OF ALL HYPERPARAMS AND ASK CHATGPT TO SUGGEST LIMITS TO TEST
-            # WE WANT A SMOOTH MODEST CURVE FIRST, SCREEN OUT HEAVY TO ACHIEVE
-
             scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
             scatter = surface_screener(scatter)
-            surfaces = surface_creator(scatter)
-            plots = [Plot(scatter=(scatter, "blue"), labels=("t", "k", "w"))] + [Plot(surface=(surface, "blue"), labels=("t", "k", "w")) for surface in surfaces]
+            surfaces = {f"Regression:1/{10**index}": surface_creator(scatter, method="regression", smoothing=1 / (10 ** index), weights=None) for index in list(range(1, 5))}
+            plots = [Plot(scatter=(scatter, "red"), surface=(surface, "blue"), title=title, labels=tuple("tkw")) for title, surface in surfaces.items()]
             option_plotter(plots)
             raise Exception()
 
