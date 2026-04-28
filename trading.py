@@ -121,9 +121,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
 
             scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
             scatter = surface_screener(scatter)
-            surfaces = {f"Regression:1/{10**index}": surface_creator(scatter, method="regression", smoothing=1 / (10 ** index), weights=None) for index in list(range(1, 5))}
-            plots = [Plot(scatter=(scatter, "red"), surface=(surface, "blue"), title=title, labels=tuple("tkw")) for title, surface in surfaces.items()]
-            option_plotter(plots)
+            surface = surface_creator(scatter, method="regression", smoothing=1/10, weights=None)
+            plot = Plot(scatter=(scatter, "red"), surface=(surface, "blue"), title=None, labels=tuple("tkw"))
+            option_plotter(plot)
             raise Exception()
 
 
