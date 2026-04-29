@@ -19,6 +19,8 @@ from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
 
+from dask.callbacks import local_callbacks
+
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
 REPOSITORY = os.path.join(ROOT, "repository")
@@ -36,7 +38,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.surface import SurfaceCalculator
+from options.surface import SurfaceCalculator, LocalCalculator
 from webscraping.webreaders import WebReader
 from support.concepts import DateRange, NumRange
 from support.surface import SurfaceScreener, SurfaceCreator
@@ -93,6 +95,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
+        local_calculator = LocalCalculator(name="LocalCalculator", radius=(0.15, 0.05))
         surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
         surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
         option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100, labels=1)
@@ -118,6 +121,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = surface_calculator(options)
+
+            for local in local_calculator(options):
+                pass
 
             scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
             scatter = surface_screener(scatter)
