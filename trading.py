@@ -14,12 +14,11 @@ import numpy as np
 import pandas as pd
 from enum import Enum
 from types import SimpleNamespace
+from dataclasses import dataclass
 from attr.converters import to_bool
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
 from collections import namedtuple as ntuple
-
-from dask.callbacks import local_callbacks
 
 MAIN = os.path.dirname(os.path.realpath(__file__))
 ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
@@ -38,10 +37,10 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.surface import SurfaceCalculator, LocalCalculator
+from options.surface import SurfaceCalculator, SurfaceScreener, LocalCalculator
 from webscraping.webreaders import WebReader
+from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
-from support.surface import SurfaceScreener, SurfaceCreator
 from support.finance import Concepts, Querys
 from support.plotters import Plotter, Plot
 from support.queues import Queues
@@ -57,13 +56,28 @@ Website = Enum("Website", ["ETRADE", "ALPACA", "INTERACTIVE"])
 Brokerage = ntuple("Brokerage", {"website": Website, "live": bool})
 
 
+@dataclass(frozen=False)
+class Options:
+    scatter: pd.DataFrame = None
+    surface: object = None
+
+    def __post_init__(self):
+        tau = self.scatter["tau"].notna()
+        mae = self.scatter["mae"].notna()
+        tiv = self.scatter["tiv"].notna()
+        mask = tau & mae & tiv
+        scatter = self.scatter[mask].dropna(how="all", inplace=False)
+        columns = dict(zip(list("tau|mae|tiv".split("|")), list("xyz")))
+        scatter = scatter.rename(columns=columns)
+        self.scatter = scatter
+
+
 def load(file):
     key = lambda website, live: Brokerage(Website[str(website).upper()], to_bool(live))
     value = lambda header, body: SimpleNamespace(**dict(zip(header, body)))
     contents = [str(line).split(" ") for line in open(file, "r").read().splitlines()]
     mapping = {key(*line[:2]): value(contents[0][2:], line[2:]) for line in contents[1:]}
     return mapping
-
 
 def merge(stocks, technicals):
     technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
@@ -94,8 +108,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        surface_calculator = SurfaceCalculator(name="SurfaceCalculator")
-        local_calculator = LocalCalculator(name="LocalCalculator", radius=(0.15, 0.05))
+        surface_calculator = SurfaceCalculator(name="SurfaceCalculator", quantity=35, gridsize=100, samplesize=5)
+        local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=5)
         surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
         surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
         option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100, labels=1)
@@ -111,6 +125,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts)
+
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
             options = sanity_filter(options)
@@ -120,17 +135,18 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
-            options = surface_calculator(options)
 
-            for local in local_calculator(options):
-                pass
+            generalized = surface_calculator(options)
+            generalized = surface_screener(generalized)
+            localized = list(local_calculator(generalized))
+            generalized = Options(scatter=generalized)
+            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
+            localized = list(map(lambda scatter: Options(scatter=scatter), localized))
+            for local in localized: local.surface = surface_creator(local, method="regression", smoothing=1/10, weights=None)
 
-            scatter = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"}).dropna(how="any", inplace=False)
-            scatter = surface_screener(scatter)
-            surface = surface_creator(scatter, method="regression", smoothing=1/10, weights=None)
-            plot = Plot(scatter=(scatter, "red"), surface=(surface, "blue"), title=None, labels=tuple("tkw"))
-            option_plotter(plot)
-            raise Exception()
+            options = [generalized] + localized
+            plots = [Plot(scatter=(option.scatter, "red"), surface=(option.surface, "blue"), title=None, labels=tuple("tkw")) for option in options]
+            option_plotter(plots)
 
 
 if __name__ == "__main__":
