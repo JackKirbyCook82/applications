@@ -112,7 +112,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=5)
         surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
         surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
-        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100, labels=1)
+        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -140,13 +140,14 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             generalized = surface_screener(generalized)
             localized = list(local_calculator(generalized))
             generalized = Options(scatter=generalized)
-            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
-            localized = list(map(lambda scatter: Options(scatter=scatter), localized))
-            for local in localized: local.surface = surface_creator(local, method="regression", smoothing=1/10, weights=None)
-
+            generalized.surface = surface_creator(generalized.scatter, method="regression", smoothing=1/10, weights=None)
+            localized = [Options(scatter=scatter) for scatter in localized]
+            for local in localized: local.surface = surface_creator(local.scatter, method="regression", smoothing=1/10, weights=None)
             options = [generalized] + localized
             plots = [Plot(scatter=(option.scatter, "red"), surface=(option.surface, "blue"), title=None, labels=tuple("tkw")) for option in options]
             option_plotter(plots)
+
+            raise Exception()
 
 
 if __name__ == "__main__":
