@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 from enum import Enum
 from types import SimpleNamespace
-from dataclasses import dataclass
 from attr.converters import to_bool
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
@@ -37,7 +36,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.surface import SurfaceCalculator, SurfaceScreener, LocalCalculator
+from options.dataset import DatasetScreener, GeneralCalculator, LocalCalculator
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
@@ -54,22 +53,6 @@ __license__ = "MIT License"
 
 Website = Enum("Website", ["ETRADE", "ALPACA", "INTERACTIVE"])
 Brokerage = ntuple("Brokerage", {"website": Website, "live": bool})
-
-
-@dataclass(frozen=False)
-class Options:
-    scatter: pd.DataFrame = None
-    surface: object = None
-
-    def __post_init__(self):
-        tau = self.scatter["tau"].notna()
-        mae = self.scatter["mae"].notna()
-        tiv = self.scatter["tiv"].notna()
-        mask = tau & mae & tiv
-        scatter = self.scatter[mask].dropna(how="all", inplace=False)
-        columns = dict(zip(list("tau|mae|tiv".split("|")), list("xyz")))
-        scatter = scatter.rename(columns=columns)
-        self.scatter = scatter
 
 
 def load(file):
@@ -108,11 +91,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        surface_calculator = SurfaceCalculator(name="SurfaceCalculator", quantity=35, gridsize=100, samplesize=5)
+
+        general_calculator = GeneralCalculator(name="GeneralCalculator", quantity=35, gridsize=100, samplesize=5)
         local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=5)
-        surface_screener = SurfaceScreener(name="SurfaceScreener", neighbors=12, threshold=6)
+        dataset_screener = DatasetScreener(name="DatasetScreener", neighbors=12, threshold=6)
         surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
-        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
+        dataset_plotter = Plotter(name="DatasetPlotter", plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -136,18 +120,18 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
 
-            generalized = surface_calculator(options)
-            generalized = surface_screener(generalized)
-            localized = list(local_calculator(generalized))
-            generalized = Options(scatter=generalized)
+            generalized = general_calculator(options)
+            generalized = dataset_screener(generalized)
             generalized.surface = surface_creator(generalized.scatter, method="regression", smoothing=1/10, weights=None)
-            localized = [Options(scatter=scatter) for scatter in localized]
-            for local in localized: local.surface = surface_creator(local.scatter, method="regression", smoothing=1/10, weights=None)
-            options = [generalized] + localized
-            plots = [Plot(scatter=(option.scatter, "red"), surface=(option.surface, "blue"), title=None, labels=tuple("tkw")) for option in options]
-            option_plotter(plots)
+            localized = list(local_calculator(generalized))
+            for dataset in localized: dataset.surface = surface_creator(dataset.scatter, method="regression", smoothing=1/10, weights=None)
 
-            raise Exception()
+
+
+#            options = [generalized] + localized
+#            plots = [Plot(scatter=(option.scatter, "red"), surface=(option.surface, "blue"), title=None, labels=tuple("tkw")) for option in options]
+#            option_plotter(plots)
+#            raise Exception()
 
 
 if __name__ == "__main__":
