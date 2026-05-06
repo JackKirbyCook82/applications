@@ -94,7 +94,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
 
         dataset_screener = DatasetScreener(name="DatasetScreener", neighbors=12, threshold=6)
         general_calculator = GeneralCalculator(name="GeneralCalculator", quantity=35, gridsize=100, samplesize=5)
-        local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=5)
+        local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=None)
         surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
         dataset_plotter = Plotter(name="DatasetPlotter", plotsize=5, gridsize=100)
 
@@ -119,12 +119,16 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
-
-            options = dataset_screener(options)
             generalized = general_calculator(options)
-            localized = list(local_calculator(generalized))
-            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
-            for dataset in localized: dataset.surface = surface_creator(dataset, method="regression", smoothing=1/10, weights=None)
+            generalized.scatter = dataset_screener(generalized.scatter)
+            localized = local_calculator(generalized.scatter)
+
+            print(str(generalized))
+            for dataset in localized: print(str(dataset))
+            raise Exception()
+
+#            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
+#            for dataset in localized: dataset.surface = surface_creator(dataset, method="regression", smoothing=1/10, weights=None)
 
 #            options = [generalized] + localized
 #            plots = [Plot(scatter=(option.scatter, "red"), surface=(option.surface, "blue"), title=None, labels=tuple("tkw")) for option in options]
