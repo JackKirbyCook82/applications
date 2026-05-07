@@ -69,6 +69,11 @@ def merge(stocks, technicals):
     stocks = stocks.merge(technicals, on="ticker", how="left")
     return stocks
 
+def display(datasets):
+    plotter = Plotter(name="DatasetPlotter", plotsize=5, gridsize=100)
+    plots = [Plot(scatter=(dataset.scatter, "red"), surface=(dataset.surface, "blue"), title=None, labels=tuple("tkw")) for dataset in datasets]
+    plotter(plots)
+
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, **kwargs):
     weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
@@ -91,12 +96,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-
         dataset_screener = DatasetScreener(name="DatasetScreener", neighbors=12, threshold=6)
         general_calculator = GeneralCalculator(name="GeneralCalculator", quantity=35, gridsize=100, samplesize=5)
         local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=None)
         surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
-        dataset_plotter = Plotter(name="DatasetPlotter", plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -119,21 +122,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
+
             generalized = general_calculator(options)
             generalized.scatter = dataset_screener(generalized.scatter)
-            localized = local_calculator(generalized.scatter)
-
-            print(str(generalized))
-            for dataset in localized: print(str(dataset))
-            raise Exception()
-
-#            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
-#            for dataset in localized: dataset.surface = surface_creator(dataset, method="regression", smoothing=1/10, weights=None)
-
-#            options = [generalized] + localized
-#            plots = [Plot(scatter=(option.scatter, "red"), surface=(option.surface, "blue"), title=None, labels=tuple("tkw")) for option in options]
-#            option_plotter(plots)
-#            raise Exception()
+            localized = list(local_calculator(generalized.scatter))
+            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
+            for dataset in localized: dataset.surface = surface_creator(dataset, method="regression", smoothing=1/10, weights=None)
 
 
 if __name__ == "__main__":
