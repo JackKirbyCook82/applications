@@ -36,12 +36,13 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.dataset import DatasetScreener, GeneralCalculator, LocalCalculator
-from webscraping.webreaders import WebReader
+from options.variances import VarianceCalculator, VarianceScreener
+from options.localizing import LocalizingCalculator
+from options.datasets import DatasetCalculator, Dataset
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
-from support.plotters import Plotter, Plot
+from webscraping.webreaders import WebReader
 from support.queues import Queues
 
 __version__ = "1.0.0"
@@ -69,11 +70,6 @@ def merge(stocks, technicals):
     stocks = stocks.merge(technicals, on="ticker", how="left")
     return stocks
 
-def display(datasets):
-    plotter = Plotter(name="DatasetPlotter", plotsize=5, gridsize=100)
-    plots = [Plot(scatter=(dataset.scatter, "red"), surface=(dataset.surface, "blue"), title=None, labels=tuple("tkw")) for dataset in datasets]
-    plotter(plots)
-
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, **kwargs):
     weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
@@ -96,10 +92,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        dataset_screener = DatasetScreener(name="DatasetScreener", neighbors=12, threshold=6)
-        general_calculator = GeneralCalculator(name="GeneralCalculator", quantity=35, gridsize=100, samplesize=5)
-        local_calculator = LocalCalculator(name="LocalCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=None)
-        surface_creator = SurfaceCreator(name="SurfaceCreator", smoothing=1e-3, gridsize=100, samplesize=5)
+        variance_calculator = VarianceCalculator(name="VarianceCalculator")
+        variance_screener = VarianceScreener(name="VarianceScreener", neighbors=12, threshold=5)
+        surface_creator = SurfaceCreator(name="SurfaceCreator", columns=list("xyz"), smoothing=1e-3, gridsize=100, samplesize=5)
+        localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=None)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -122,12 +118,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
+            options = variance_calculator(options)
+            options = variance_screener(options)
 
-            generalized = general_calculator(options)
-            generalized.scatter = dataset_screener(generalized.scatter)
-            localized = list(local_calculator(generalized.scatter))
-            generalized.surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
-            for dataset in localized: dataset.surface = surface_creator(dataset, method="regression", smoothing=1/10, weights=None)
+            for scatter in localizing_calculator(options):
+                surface = surface_creator(scatter, method="regression", smoothing=1/10, weights=None)
+                dataset = Dataset(scatter=scatter, surface=surface)
 
 
 if __name__ == "__main__":
