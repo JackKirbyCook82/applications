@@ -36,9 +36,8 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.variances import VarianceCalculator, VarianceScreener
+from options.variances import VarianceCalculator, VarianceScreener, VariationCalculator
 from options.localizing import LocalizingCalculator
-from options.datasets import DatasetCalculator, Dataset
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
@@ -96,6 +95,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         variance_screener = VarianceScreener(name="VarianceScreener", neighbors=12, threshold=5)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns=list("xyz"), smoothing=1e-3, gridsize=100, samplesize=5)
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=None)
+        variation_calculator = VariationCalculator(name="VariationCalculator", neighbors=25)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -121,9 +121,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = variance_calculator(options)
             options = variance_screener(options)
 
-            for scatter in localizing_calculator(options):
-                surface = surface_creator(scatter, method="regression", smoothing=1/10, weights=None)
-                dataset = Dataset(scatter=scatter, surface=surface)
+            for localized in localizing_calculator(options):
+                surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
+                localized = variation_calculator(localized, surface)
 
 
 if __name__ == "__main__":
