@@ -36,7 +36,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.variances import VarianceCalculator, VarianceScreener, VariationCalculator
+from options.variances import VarianceCalculator, ExclusionCalculator, InclusionCalculator
 from options.localizing import LocalizingCalculator
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
@@ -92,10 +92,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         variance_calculator = VarianceCalculator(name="VarianceCalculator")
-        variance_screener = VarianceScreener(name="VarianceScreener", neighbors=12, threshold=5)
+        exclusion_screener = ExclusionCalculator(name="ExclusionCalculator", neighbors=25, threshold=5)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns=list("xyz"), smoothing=1e-3, gridsize=100, samplesize=5)
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05), count=None)
-        variation_calculator = VariationCalculator(name="VariationCalculator", neighbors=25)
+        inclusion_calculator = InclusionCalculator(name="InclusionCalculator", neighbors=25)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -119,11 +119,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = variance_calculator(options)
-            options = variance_screener(options)
+            options = exclusion_screener(options)
 
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
-                localized = variation_calculator(localized, surface)
+                localized = inclusion_calculator(localized, surface=surface)
 
 
 if __name__ == "__main__":
