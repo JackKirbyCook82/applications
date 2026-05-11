@@ -92,11 +92,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, threshold=5)
+        variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, threshold=3)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", smoothing=1e-3, gridsize=100, samplesize=5)
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05))
         standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=15)
-        plotter = Plotter(name="Plotter", plotsize=5, gridsize=100)
+        localized_plotter = Plotter(name="LocalizedPlotter", plotsize=5, gridsize=100)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -124,9 +124,13 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
-                scatter = localized.rename(columns=dict(zip("tau|mae|ziv".split("|"), list("xyz"))))
-                plot = Plot(scatter=(scatter, "red"), title=None, labels=tuple("tkw"))
-                plotter(plot)
+                variance = localized[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"})
+                standard = localized[["tau", "mae", "ziv"]].rename(columns={"tau": "x", "mae": "y", "ziv": "z"})
+                variance = Plot(scatter=(variance, "red"), surface=(surface, "blue"), title=None, labels=tuple("tkw"))
+                standard = Plot(scatter=(standard, "red"), title=None, labels=tuple("tkw"))
+                localized_plotter([variance, standard])
+                print(localized)
+                raise Exception()
 
 
 if __name__ == "__main__":
