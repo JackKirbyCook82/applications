@@ -38,6 +38,7 @@ from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
+from options.scanners import FlyScanner, CalenderScanner
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
@@ -70,6 +71,14 @@ def merge(stocks, technicals):
     stocks = stocks.merge(technicals, on="ticker", how="left")
     return stocks
 
+def display(options, surface):
+    plotter = Plotter(name="Plotter", plotsize=5, gridsize=100)
+    variance = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"})
+    variance = Plot(scatter=(variance, "red"), surface=(surface, "blue"), title=None, labels=tuple("tkw"))
+    standard = options[["tau", "mae", "ziv"]].rename(columns={"tau": "x", "mae": "y", "ziv": "z"})
+    standard = Plot(scatter=(standard, "red"), title=None, labels=tuple("tkw"))
+    plotter([variance, standard])
+
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, **kwargs):
     weights = lambda spread, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / spread.clip(lower=1e-6)
@@ -93,10 +102,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, threshold=3)
-        surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", smoothing=1e-3, gridsize=100, samplesize=5)
-        localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=15, coverage=(5, 10), radius=(0.15, 0.05))
-        standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=15)
-        localized_plotter = Plotter(name="LocalizedPlotter", plotsize=5, gridsize=100)
+        localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
+        surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
+        standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=25)
+        calendar_scanner = CalenderScanner(name="CalenderScanner", width=1)
+        fly_scanner = FlyScanner(name="FlyScanner", width=1)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -124,13 +134,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
-                variance = localized[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"})
-                standard = localized[["tau", "mae", "ziv"]].rename(columns={"tau": "x", "mae": "y", "ziv": "z"})
-                variance = Plot(scatter=(variance, "red"), surface=(surface, "blue"), title=None, labels=tuple("tkw"))
-                standard = Plot(scatter=(standard, "red"), title=None, labels=tuple("tkw"))
-                localized_plotter([variance, standard])
-                print(localized)
-                raise Exception()
+                fly_scanner(localized)
 
 
 if __name__ == "__main__":
