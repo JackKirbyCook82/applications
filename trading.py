@@ -105,8 +105,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=25)
-        calendar_scanner = CalenderScanner(name="CalenderScanner", width=1)
-        fly_scanner = FlyScanner(name="FlyScanner", width=1)
+        calendar_scanner = CalenderScanner(name="CalenderScanner", proximity=1)
+        fly_scanner = FlyScanner(name="FlyScanner", proximity=1)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -134,7 +134,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
-                fly_scanner(localized)
+                spreads = fly_scanner(localized)
 
 
 if __name__ == "__main__":
