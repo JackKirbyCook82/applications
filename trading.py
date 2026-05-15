@@ -38,7 +38,7 @@ from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
-from options.scanners import FlyScanner, CalenderScanner
+from options.scanners import FlyScanner, CalenderScanner, Metrics, Ratios
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
@@ -81,12 +81,14 @@ def display(options, surface):
 
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, **kwargs):
-    weights = lambda gap, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / gaps.clip(lower=1e-6)
+    weights = lambda gap, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / gap.clip(lower=1e-6)
     gaps = lambda gap, spot: gap <= 0.05 * spot
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
+    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, edge=+0.0, theta=-0.25, vega=0.0, gamma=None)
+    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, edge=+0.0, theta=-0.25, vega=None, gamma=None)
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -105,8 +107,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=25)
-        calendar_scanner = CalenderScanner(name="CalenderScanner", proximity=1)
-        fly_scanner = FlyScanner(name="FlyScanner", proximity=1)
+        calendar_scanner = CalenderScanner(name="CalenderScanner", proximity=1, metrics=calendar)
+        fly_scanner = FlyScanner(name="FlyScanner", proximity=1, metrics=fly)
 
         while bool(symbols):
             symbol = symbols.read()
@@ -134,8 +136,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
-                spreads = fly_scanner(localized)
-
+                calendars = calendar_scanner(localized)
+                flys = fly_scanner(localized)
 
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
