@@ -87,8 +87,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
-    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, edge=+0.0, efficiency=1, theta=-0.25, vega=0.0, gamma=None)
-    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, edge=+0.0, efficiency=1, theta=-0.25, vega=None, gamma=None)
+    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, profit=+0.0, quality=1, theta=-0.25, vega=0.0, gamma=None)
+    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, profit=+0.0, quality=1, theta=-0.25, vega=None, gamma=None)
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=3) as source:
