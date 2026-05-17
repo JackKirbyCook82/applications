@@ -38,7 +38,9 @@ from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
-from options.prospects import ProspectCalculator, Metrics, Ratios
+from options.prospects import ProspectCalculator
+from options.priorities import PriorityCalculator
+from options.spreads import Metrics, Ratios
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
@@ -87,8 +89,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
-    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, profit=+0.0, quality=1, theta=-0.25, vega=0.0, gamma=None)
-    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=1.0, profit=+0.0, quality=1, theta=-0.25, vega=None, gamma=None)
+
+    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, edge=0.00)
+    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, edge=0.00)
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=3) as source:
@@ -108,7 +111,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=25)
-        prospect_calculator = ProspectCalculator(name="ProspectCalculator", proximity=1, metrics=metrics)
+        prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics, proximity=1)
+        priority_calculator = PriorityCalculator(name="PriorityCalculator")
 
         while bool(symbols):
             symbol = symbols.read()
@@ -136,10 +140,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
-                prospects = prospect_calculator(localized)
-                if prospects.empty: continue
 
-                print(prospects)
+                print(localized)
                 raise Exception()
 
 
