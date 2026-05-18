@@ -38,9 +38,9 @@ from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
+from options.spreads import SpreadCalculator, Metrics, Ratios
 from options.prospects import ProspectCalculator
 from options.priorities import PriorityCalculator
-from options.spreads import Metrics, Ratios
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
@@ -89,7 +89,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
-
+    spreads = list(Concepts.Strategies.Spread)
     calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, edge=0.00)
     fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, edge=0.00)
     metrics = dict(calendar=calendar, fly=fly)
@@ -111,7 +111,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=25)
-        prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics, proximity=1)
+        spread_calculator = SpreadCalculator(name="SpreadCalculator", spreads=spreads, limit=1)
+        prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
 
         while bool(symbols):
@@ -140,9 +141,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
-
-                print(localized)
-                raise Exception()
+                spreads = spread_calculator(localized)
+                spreads = prospect_calculator(spreads)
+                spreads = priority_calculator(spreads)
 
 
 if __name__ == "__main__":
