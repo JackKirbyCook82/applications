@@ -39,8 +39,7 @@ from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
 from options.spreads import SpreadCalculator, Metrics, Ratios
-from options.prospects import ProspectCalculator
-from options.priorities import PriorityCalculator
+from options.prospects import ProspectCalculator, PriorityCalculator
 from support.surface import SurfaceCreator
 from support.concepts import DateRange, NumRange
 from support.finance import Concepts, Querys
