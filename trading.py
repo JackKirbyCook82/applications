@@ -157,6 +157,7 @@ if __name__ == "__main__":
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
     parameters.update({"period": 252, "interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
+    parameters.update({"term": Concepts.Markets.Term.LIMIT, "tenure": Concepts.Markets.Tenure.DAY})
     main(*arguments, **parameters)
 
 
