@@ -30,6 +30,7 @@ TICKERS = os.path.join(RESOURCES, "tickers.txt")
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
+from alpaca.orders import AlpacaSpreadUploader
 from stocks.technicals import TechnicalCalculator
 from options.markets import MarketCalculator, SanityFilter, ViabilityFilter
 from options.volatility import VolatilityCalculator
@@ -81,7 +82,7 @@ def display(options, surface):
     plotter([variance, standard])
 
 
-def main(*args, tickers, history, expires, strikes, period, interest, dividends, **kwargs):
+def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
     weights = lambda gap, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / gap.clip(lower=1e-6)
     gaps = lambda gap, spot: gap <= 0.05 * spot
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
@@ -113,6 +114,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         spread_calculator = SpreadCalculator(name="SpreadCalculator", spreads=spreads, limit=1)
         prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False])
 
         while bool(symbols):
             symbol = symbols.read()
@@ -143,6 +145,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
                 spreads = spread_calculator(localized)
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
+                spread_uploader(spreads, term=term, tenure=tenure)
 
 
 if __name__ == "__main__":
