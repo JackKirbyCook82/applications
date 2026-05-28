@@ -41,9 +41,10 @@ from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
 from options.spreads import SpreadCalculator, Metrics, Ratios
 from options.prospects import ProspectCalculator, PriorityCalculator
+from finance.variables import Concepts, Querys
+from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
 from support.surface import SurfaceCreator
-from webscraping.webreaders import WebReader
 from support.plotters import Plotter, Plot
 from support.queues import Queues
 
@@ -87,8 +88,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
-    technicals = [Concepts.Technicals.State.STATS]
-    spreads = [Concepts.Strategies.Spread.FLY, Concepts.Strategies.Spread.CALENDAR]
+    technicals = [Concepts.Technicals.STATS]
+    spreads = [Concepts.Spread.FLY, Concepts.Spread.CALENDAR]
     calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, edge=0.00)
     fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, edge=0.00)
     metrics = dict(calendar=calendar, fly=fly)
@@ -161,7 +162,7 @@ if __name__ == "__main__":
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
     parameters.update({"period": 252, "interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
-    parameters.update({"term": Concepts.Markets.Term.LIMIT, "tenure": Concepts.Markets.Tenure.DAY})
+    parameters.update({"term": Concepts.Terms.LIMIT, "tenure": Concepts.Tenure.DAY})
     main(*arguments, **parameters)
 
 
