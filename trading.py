@@ -41,9 +41,8 @@ from options.variances import VarianceCalculator, StandardCalculator
 from options.localizing import LocalizingCalculator
 from options.spreads import SpreadCalculator, Metrics, Ratios
 from options.prospects import ProspectCalculator, PriorityCalculator
+from support.custom import NumRange, DateRange
 from support.surface import SurfaceCreator
-from support.concepts import DateRange, NumRange
-from support.finance import Concepts, Querys
 from webscraping.webreaders import WebReader
 from support.plotters import Plotter, Plot
 from support.queues import Queues
@@ -89,7 +88,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.State.STATS]
-    spreads = list(Concepts.Strategies.Spread)
+    spreads = [Concepts.Strategies.Spread.FLY, Concepts.Strategies.Spread.CALENDAR]
     calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, edge=0.00)
     fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, edge=0.00)
     metrics = dict(calendar=calendar, fly=fly)
@@ -146,6 +145,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
                 spread_uploader(spreads, term=term, tenure=tenure)
+
+                raise Exception()
 
 
 if __name__ == "__main__":
