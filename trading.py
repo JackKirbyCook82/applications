@@ -86,7 +86,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     weights = lambda gap, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / gap.clip(lower=1e-6)
     gaps = lambda gap, spot: gap <= 0.05 * spot
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
-    symbols = list(map(Querys.Symbol, tickers))
+    symbols = list(map(Querys.Symbol.create, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Concepts.Technicals.STATS]
     spreads = [Concepts.Spread.FLY, Concepts.Spread.CALENDAR]
