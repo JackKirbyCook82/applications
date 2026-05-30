@@ -88,7 +88,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol.create, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
-    technicals = [Concepts.Technicals.STATS]
+    technicals = [Concepts.Technical.STATS]
     spreads = [Concepts.Spread.FLY, Concepts.Spread.CALENDAR]
     calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, edge=0.00)
     fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, edge=0.00)
