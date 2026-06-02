@@ -90,8 +90,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Enumerations.Technical.STATS]
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
-    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, edge=0.00)
-    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, edge=0.00)
+    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, profit=0.00)
+    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, profit=0.00)
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=3) as source:
