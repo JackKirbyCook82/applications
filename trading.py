@@ -127,7 +127,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts)
-
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
             options = sanity_filter(options)
@@ -138,10 +137,12 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = variance_calculator(options)
-
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
+
+                ### DEBUGGING HERE ###
+
                 spreads = spread_calculator(localized)
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
