@@ -141,9 +141,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standard_calculator(localized, surface)
                 spreads = spread_calculator(localized)
-
-                ### DEBUGGING HERE ###
-
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
                 spread_uploader(spreads, term=term, tenure=tenure)
