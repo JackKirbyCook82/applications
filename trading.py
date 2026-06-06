@@ -37,7 +37,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.variances import VarianceCalculator, StandardCalculator
+from options.variances import VarianceCalculator, StandardizingCalculator
 from options.localizing import LocalizingCalculator
 from options.spreads import SpreadCalculator, Metrics, Ratios
 from options.prospects import ProspectCalculator, PriorityCalculator
@@ -110,7 +110,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, threshold=3)
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
-        standard_calculator = StandardCalculator(name="StandardCalculator", neighbors=25)
+        standardizing_calculator = StandardizingCalculator(name="StandardizingCalculator", neighbors=25)
         spread_calculator = SpreadCalculator(name="SpreadCalculator", spreads=spreads, limit=1)
         prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
@@ -139,13 +139,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = variance_calculator(options)
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
-                localized = standard_calculator(localized, surface)
+                localized = standardizing_calculator(localized, surface)
                 spreads = spread_calculator(localized)
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
                 spread_uploader(spreads, term=term, tenure=tenure)
-
-                raise Exception()
 
 
 if __name__ == "__main__":
