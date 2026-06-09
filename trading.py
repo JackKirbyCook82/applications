@@ -38,7 +38,7 @@ from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardizingCalculator
-from options.localizing import LocalizingCalculator
+from options.localizing import LocalizingCalculator, Radius, Variables, Axes
 from options.spreads import SpreadCalculator, Metrics, Ratios
 from options.prospects import ProspectCalculator, PriorityCalculator
 from finance.variables import Enumerations, Querys
@@ -90,9 +90,15 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Enumerations.Technical.STATS]
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
-    calendar = Metrics(ratios=Ratios(gap=+0.50, theta=-0.35, vega=+0.00), zscore=0.50, profit=0.00)
-    fly = Metrics(ratios=Ratios(gap=+0.50, theta=-0.25), zscore=0.75, profit=0.00)
+    ratios = Ratios(gap=+0.50, theta=-0.35, vega=+0.00)
+    calendar = Metrics(ratios=ratios, zscore=0.50, profit=0.00)
+    ratios = Ratios(gap=+0.50, theta=-0.25)
+    fly = Metrics(ratios=ratios, zscore=0.75, profit=0.00)
     metrics = dict(calendar=calendar, fly=fly)
+    radius = Radius(inner=0.05, outer=0.12, step=0.01)
+    tau = Axes.Tau(window=2, coverage=5)
+    mae = Axes.Mae(radius=radius, coverage=10)
+    variables = Variables(tau=tau, mae=mae)
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -108,7 +114,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, threshold=3)
-        localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", quantity=35, coverage=(5, 10), radius=(0.15, 0.05))
+        localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", variables=variables, samples=35, overlap=0.80)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         standardizing_calculator = StandardizingCalculator(name="StandardizingCalculator", neighbors=25)
         spread_calculator = SpreadCalculator(name="SpreadCalculator", spreads=spreads, limit=1)
