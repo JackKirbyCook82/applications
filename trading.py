@@ -135,14 +135,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = option_downloader(contracts)
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
-
-            print(options)
-            raise Exception()
-
             options = sanity_filter(options)
             options = market_calculator(options)
             options = viability_filter(options)
-
             options = forward_calculator(options, interest=interest, dividends=dividends)
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
