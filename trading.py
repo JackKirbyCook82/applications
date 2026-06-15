@@ -83,8 +83,6 @@ def display(options, surface):
 
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
-    weights = lambda gap, supply, demand: np.sqrt((supply + demand).clip(lower=0.0)) / gap.clip(lower=1e-6)
-    gaps = lambda gap, spot: gap <= 0.05 * spot
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
     symbols = list(map(Querys.Symbol, tickers))
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
@@ -109,7 +107,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         sanity_filter = SanityFilter(name="SanityFilter")
         market_calculator = MarketCalculator(name="MarketCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", size=5, money=0.20, tight=0.20)
-        forward_calculator = ForwardCalculator(name="ForwardCalculator", weights=weights, gaps=gaps, samplesize=5)
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tight=0.20)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
