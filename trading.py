@@ -38,8 +38,8 @@ from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, StandardizingCalculator
-from options.localizing import LocalizingCalculator, Radius, Variables, Axes
-from options.spreads import SpreadCalculator, Metrics, Ratios
+from options.localizing import LocalizingCalculator, LocalizingVariables
+from options.spreads import SpreadCalculator, SpreadMetrics
 from options.prospects import ProspectCalculator, PriorityCalculator
 from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
@@ -88,15 +88,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Enumerations.Technical.STATS]
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
-    ratios = Ratios(gap=+0.50, theta=-0.35, vega=+0.00)
-    calendar = Metrics(ratios=ratios, zscore=0.50, profit=0.00)
-    ratios = Ratios(gap=+0.50, theta=-0.25)
-    fly = Metrics(ratios=ratios, zscore=0.75, profit=0.00)
+    variables = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10))
+    calendar = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.35, "vega": +0.00}, zscore=0.50, profit=0.00)
+    fly = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.25}, zscore=0.75, profit=0.00)
     metrics = dict(calendar=calendar, fly=fly)
-    radius = Radius(inner=0.05, outer=0.12, step=0.01)
-    tau = Axes.Tau(window=2, coverage=5)
-    mae = Axes.Mae(radius=radius, coverage=10)
-    variables = Variables(tau=tau, mae=mae)
 
     with WebReader(delay=3) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
