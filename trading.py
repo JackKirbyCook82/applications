@@ -106,7 +106,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, quantile=0.95, multiple=3)
+        variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, quantile=0.95, multiple=2.5)
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", variables=variables, samples=35, overlap=0.80)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         standardizing_calculator = StandardizingCalculator(name="StandardizingCalculator", neighbors=25)
