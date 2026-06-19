@@ -88,7 +88,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
     technicals = [Enumerations.Technical.STATS]
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
-    variables = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10))
+    variables = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     calendar = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.35, "vega": +0.00}, zscore=0.50, profit=0.00)
     fly = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.25}, zscore=0.75, profit=0.00)
     metrics = dict(calendar=calendar, fly=fly)
@@ -130,6 +130,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options["spot"] = stock["median"]
             options = sanity_filter(options)
             options = market_calculator(options)
+
+            print(options)
+            raise Exception()
+
             options = viability_filter(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
             options = valuation_calculator(options, interest=interest, dividends=dividends)
