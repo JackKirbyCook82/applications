@@ -107,8 +107,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
         spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False])
-
-        # PLOTTER INTERFACE
         option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
         option_plotter["survival"] = Plot(title="survival", labels=["tight", "money", "survive"], axes=["tightness", "moneyness", "survival"])
 
@@ -128,8 +126,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = sanity_filter(options)
             options = market_calculator(options)
             survivals = survival_calculator(options)
-
-            #PLOTTER INTERFACE
             option_plotter["survival"].draw(survivals, color="blue")
             option_plotter.display()
 
