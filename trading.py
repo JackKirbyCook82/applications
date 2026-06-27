@@ -73,14 +73,6 @@ def merge(stocks, technicals):
     stocks = stocks.merge(technicals, on="ticker", how="left")
     return stocks
 
-def display(options, surface):
-    plotter = Plotter(name="Plotter", plotsize=5, gridsize=100)
-    variance = options[["tau", "mae", "tiv"]].rename(columns={"tau": "x", "mae": "y", "tiv": "z"})
-    variance = Plot(scatter=(variance, "red"), surface=(surface, "blue"), title=None, labels=tuple("tkw"))
-    standard = options[["tau", "mae", "ziv"]].rename(columns={"tau": "x", "mae": "y", "ziv": "z"})
-    standard = Plot(scatter=(standard, "red"), title=None, labels=tuple("tkw"))
-    plotter([variance, standard])
-
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
     authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
@@ -116,6 +108,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
         spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False])
 
+        # PLOTTER INTERFACE
+        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
+        option_plotter["survival"] = Plot(title="survival", labels=["tight", "money", "survive"], axes=["tightness", "moneyness", "survival"])
+
         while bool(symbols):
             symbol = symbols.read()
             bars = bars_downloader([symbol], history=history)
@@ -132,11 +128,14 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = sanity_filter(options)
             options = market_calculator(options)
             survivals = survival_calculator(options)
-            options = viability_calculator(options)
 
-            print(options)
+            #PLOTTER INTERFACE
+            option_plotter["survival"].draw(survivals, color="blue")
+            option_plotter.display()
+
             raise Exception()
 
+            options = viability_calculator(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
