@@ -8,6 +8,7 @@ Created on Weds Mar 18 2026
 
 import os
 import sys
+import queue
 import logging
 import warnings
 import numpy as np
@@ -45,8 +46,7 @@ from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
 from support.surface import SurfaceCreator
-from support.plotters import Plotter, Plot
-from support.queues import Queues
+from support.plotters import Plotter, Plot, Curve
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -75,11 +75,10 @@ def merge(stocks, technicals):
 
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
-    authenticators, accounts = load(AUTHENTICATORS), load(ACCOUNTS)
-    symbols = list(map(Querys.Symbol, tickers))
-    symbols = Queues.FIFO(contents=symbols, capacity=None, timeout=None)
-    technicals = [Enumerations.Technical.STATS]
+    authenticators, accounts, symbols = load(AUTHENTICATORS), load(ACCOUNTS), queue.Queue()
+    for ticker in tickers: symbols.put(Querys.Symbol(ticker))
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
+    technicals = [Enumerations.Technical.STATS]
     variables = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     calendar = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.35, "vega": +0.00}, zscore=0.50, profit=0.00)
     fly = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.25}, zscore=0.75, profit=0.00)
@@ -107,11 +106,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
         spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        option_plotter = Plotter(name="OptionPlotter", plotsize=5, gridsize=100)
-        option_plotter["survival"] = Plot(title="survival", labels=["tight", "money", "survive"], axes=["tightness", "moneyness", "survival"])
+        option_plotter = Plotter(name="OptionPlotter", plotsize=5)
+        option_plotter["survivals"] = Plot(title="survivals", labels=["tight", "money", "survive"])
 
         while bool(symbols):
-            symbol = symbols.read()
+            symbol = symbols.get()
             bars = bars_downloader([symbol], history=history)
             stocks = stock_downloader([symbol])
             technicals = technical_calculator(bars, period=period)
@@ -125,8 +124,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options["spot"] = stock["median"]
             options = sanity_filter(options)
             options = market_calculator(options)
+
             survivals = survival_calculator(options)
-            option_plotter["survival"].draw(survivals, color="blue")
+            survivals = Curve.Scatter(survivals, color="blue", columns=["tightness", "moneyness", "survival"])
+            option_plotter["survivals"].append(survivals)
             option_plotter.display()
 
             raise Exception()
