@@ -46,7 +46,7 @@ from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
 from support.surface import SurfaceCreator
-from support.plotters import Plotter, Plot, Artist
+from support.plotters import Plotter, Plot, Pallet
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -65,6 +65,7 @@ def load(file):
     contents = [str(line).split(" ") for line in open(file, "r").read().splitlines()]
     mapping = {key(*line[:2]): value(contents[0][2:], line[2:]) for line in contents[1:]}
     return mapping
+
 
 def merge(stocks, technicals):
     technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
@@ -106,8 +107,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
         spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        option_plotter = Plotter(name="OptionPlotter", plotsize=5)
+        option_plotter = Plotter(name="OptionPlotter", plotsize=6)
         option_plotter["survivals"] = Plot(title="survivals", labels=["tight", "money", "survive"])
+        option_plotter["generalized"] = Plot(title="generalized", labels=["tau", "mae", "tiv"])
+        option_plotter["localized"] = Plot(title="localized", labels=["tau", "mae", "tiv"])
 
         while not symbols.empty():
             symbol = symbols.get()
@@ -122,30 +125,41 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = option_downloader(contracts)
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
+
+            print(options)
+            raise Exception()
+
             options = sanity_filter(options)
             options = market_calculator(options)
 
             survivals = survival_calculator(options)
-            curve = Artist.Scatter(survivals, color="blue", columns=["tightness", "moneyness", "survival"], thickness=30)
-            option_plotter["survivals"].append(curve)
-            line = Artist.Line({"tightness": 0.20, "moneyness": 0.20}, color="red", columns=["tightness", "moneyness", "survivals"], thickness=5)
-            option_plotter["survivals"].append(line)
-            option_plotter.display()
+            surface = Pallet.Scatter(survivals, color="blue", thickness=30, columns=["tightness", "moneyness", "survival"])
+            option_plotter["survivals"].append(surface)
+            location = Pallet.Line({"tightness": 0.20, "moneyness": 0.20}, color="red", thickness=5, columns=["tightness", "moneyness", "survivals"])
+            option_plotter["survivals"].append(location)
 
             options = viability_calculator(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
             options = valuation_calculator(options, interest=interest, dividends=dividends)
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
-            options = variance_calculator(options)
 
-            for localized in localizing_calculator(options):
-                surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
-                localized = standardizing_calculator(localized, surface)
-                spreads = spread_calculator(localized)
-                spreads = prospect_calculator(spreads)
-                spreads = priority_calculator(spreads)
-                spread_uploader(spreads, term=term, tenure=tenure)
+            generalized = variance_calculator(options)
+            surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
+            surface = Pallet.Surface(surface, color="blue", gridsize=100, transparency=0.75)
+            option_plotter["generalized"].append(surface)
+
+            localizer = localizing_calculator(generalized)
+            localized = next(localizer)
+            surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
+            option_plotter["localized"].append(surface)
+            localized = standardizing_calculator(localized, surface)
+            spreads = spread_calculator(localized)
+            spreads = prospect_calculator(spreads)
+            spreads = priority_calculator(spreads)
+
+            raise Exception()
+            spread_uploader(spreads, term=term, tenure=tenure)
 
 
 if __name__ == "__main__":
