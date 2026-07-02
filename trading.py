@@ -33,7 +33,7 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from alpaca.history import AlpacaBarsDownloader
 from alpaca.orders import AlpacaSpreadUploader
 from stocks.technicals import TechnicalCalculator
-from options.markets import MarketCalculator, SanityFilter, SurvivalCalculator, ViabilityCalculator
+from options.markets import MarketCalculator, SanityCalculator, SurvivalCalculator, ViabilityCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -91,7 +91,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
-        sanity_filter = SanityFilter(name="SanityFilter")
+        sanity_calculator = SanityCalculator(name="SanityCalculator")
         market_calculator = MarketCalculator(name="MarketCalculator")
         survival_calculator = SurvivalCalculator(name="SurvivalCalculator", size=5, money=NumRange(0.05, 0.50), tight=NumRange(0.05, 0.50), gridsize=10)
         viability_calculator = ViabilityCalculator(name="ViabilityCalculator", size=5, money=0.20, tight=0.20)
@@ -125,24 +125,21 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = option_downloader(contracts)
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
-
-            print(options)
-            raise Exception()
-
-            options = sanity_filter(options)
-            options = market_calculator(options)
-
+            options = market_calculator(options, inplace=True)
+            options = sanity_calculator(options)
             survivals = survival_calculator(options)
-            surface = Pallet.Scatter(survivals, color="blue", thickness=30, columns=["tightness", "moneyness", "survival"])
-            option_plotter["survivals"].append(surface)
-            location = Pallet.Line({"tightness": 0.20, "moneyness": 0.20}, color="red", thickness=5, columns=["tightness", "moneyness", "survivals"])
-            option_plotter["survivals"].append(location)
-
             options = viability_calculator(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
-            options = valuation_calculator(options, interest=interest, dividends=dividends)
-            options = volatility_calculator(options, interest=interest, dividends=dividends)
-            options = greek_calculator(options, interest=interest, dividends=dividends)
+            valuations = valuation_calculator(options, interest=interest, dividends=dividends, inplace=False)
+            volatilities = volatility_calculator(options, interest=interest, dividends=dividends, inplace=False)
+            greeks = greek_calculator(options, interest=interest, dividends=dividends, inplace=False)
+
+            raise Exception()
+
+#            surface = Pallet.Scatter(survivals, color="blue", thickness=30, columns=["tightness", "moneyness", "survival"])
+#            option_plotter["survivals"].append(surface)
+#            location = Pallet.Line({"tightness": 0.20, "moneyness": 0.20}, color="red", thickness=5, columns=["tightness", "moneyness", "survivals"])
+#            option_plotter["survivals"].append(location)
 
             generalized = variance_calculator(options)
             surface = surface_creator(generalized, method="regression", smoothing=1/10, weights=None)
