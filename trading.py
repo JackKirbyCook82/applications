@@ -125,14 +125,14 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = option_downloader(contracts)
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
-            options = market_calculator(options, inplace=True)
+            options = market_calculator(options, include=True)
             options = sanity_calculator(options)
             survivals = survival_calculator(options)
             options = viability_calculator(options)
-            options = forward_calculator(options, interest=interest, dividends=dividends)
-            valuations = valuation_calculator(options, interest=interest, dividends=dividends, inplace=False)
-            volatilities = volatility_calculator(options, interest=interest, dividends=dividends, inplace=False)
-            greeks = greek_calculator(options, interest=interest, dividends=dividends, inplace=False)
+            forwards = forward_calculator(options, interest=interest, dividends=dividends, include=False)
+            valuations = valuation_calculator(options, interest=interest, dividends=dividends, include=False)
+            volatilities = volatility_calculator(options, interest=interest, dividends=dividends, include=False)
+            greeks = greek_calculator(options, interest=interest, dividends=dividends, include=False)
 
             raise Exception()
 
