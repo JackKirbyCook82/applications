@@ -46,7 +46,7 @@ from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
 from support.surface import SurfaceCreator
-from support.plotters import Plotter, Plot, Curve
+from support.plotters import Plotter, Plot, Artist
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -109,7 +109,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         option_plotter = Plotter(name="OptionPlotter", plotsize=5)
         option_plotter["survivals"] = Plot(title="survivals", labels=["tight", "money", "survive"])
 
-        while bool(symbols):
+        while not symbols.empty():
             symbol = symbols.get()
             bars = bars_downloader([symbol], history=history)
             stocks = stock_downloader([symbol])
@@ -126,7 +126,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = market_calculator(options)
 
             survivals = survival_calculator(options)
-            survivals = Curve.Scatter(survivals, color="blue", columns=["tightness", "moneyness", "survival"])
+            survivals = Artist.Scatter(survivals, color="blue", columns=["tightness", "moneyness", "survival"], thickness=30)
             option_plotter["survivals"].append(survivals)
             option_plotter.display()
 
