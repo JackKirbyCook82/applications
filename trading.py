@@ -89,9 +89,10 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False], uploading=False)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         viability_filter = ViabilityFilter(name="ViabilityFilter", active=1.00, money=0.15, tight=0.15)
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         market_calculator = MarketCalculator(name="MarketCalculator")
         forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tight=0.15)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
@@ -104,7 +105,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         spread_calculator = SpreadCalculator(name="SpreadCalculator", spreads=spreads, limit=1)
         prospect_calculator = ProspectCalculator(name="ProspectCalculator", metrics=metrics)
         priority_calculator = PriorityCalculator(name="PriorityCalculator")
-        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False])
 
         while not symbols.empty():
             symbol = symbols.get()
