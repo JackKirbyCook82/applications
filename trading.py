@@ -84,7 +84,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     fly = SpreadMetrics.create(ratios={"gap": +0.50, "theta": -0.25}, zscore=0.75, profit=0.00)
     metrics = dict(calendar=calendar, fly=fly)
 
-    with WebReader(delay=3) as source:
+    with WebReader(delay=1) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
@@ -126,11 +126,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = market_calculator(options)
 
             survivals = survival_calculator(options)
-            survivals = Artist.Scatter(survivals, color="blue", columns=["tightness", "moneyness", "survival"], thickness=30)
-            option_plotter["survivals"].append(survivals)
+            curve = Artist.Scatter(survivals, color="blue", columns=["tightness", "moneyness", "survival"], thickness=30)
+            option_plotter["survivals"].append(curve)
+            line = Artist.Line({"tightness": 0.20, "moneyness": 0.20}, color="red", columns=["tightness", "moneyness", "survivals"], thickness=5)
+            option_plotter["survivals"].append(line)
             option_plotter.display()
-
-            raise Exception()
 
             options = viability_calculator(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
@@ -138,6 +138,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = variance_calculator(options)
+
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standardizing_calculator(localized, surface)
