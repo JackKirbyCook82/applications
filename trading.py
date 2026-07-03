@@ -91,7 +91,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
-        viability_filter = ViabilityFilter(name="ViabilityFilter", active=1.00, money=0.15, tight=0.15)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         market_calculator = MarketCalculator(name="MarketCalculator")
