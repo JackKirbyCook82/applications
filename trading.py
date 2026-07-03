@@ -85,17 +85,17 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=1) as source:
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False], uploading=True)
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False], uploading=False)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
-        viability_filter = ViabilityFilter(name="ViabilityFilter", active=1.00, money=0.20, tight=0.20)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", active=1.00, money=0.15, tight=0.15)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
         market_calculator = MarketCalculator(name="MarketCalculator")
-        forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tight=0.20)
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tight=0.15)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -119,7 +119,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = option_downloader(contracts)
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
-
             options = sanity_filter(options)
             options = market_calculator(options)
             options = viability_filter(options)
@@ -128,7 +127,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = variance_calculator(options)
-
             localizer = localizing_calculator(options)
             for localized in localizer:
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
@@ -137,8 +135,6 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
                 spread_uploader(spreads, term=term, tenure=tenure)
-
-            break
 
 
 if __name__ == "__main__":
