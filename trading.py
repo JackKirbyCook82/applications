@@ -28,8 +28,9 @@ TICKERS = RESOURCES / "tickers.txt"
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
 from alpaca.orders import AlpacaSpreadUploader
+from stocks import StockCalculator
 from stocks.technicals import TechnicalCalculator
-from options.markets import MarketCalculator, SanityFilter, ViabilityFilter
+from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -51,14 +52,6 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def merge(stocks, technicals):
-    technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
-    technicals = technicals.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).last()
-    technicals = technicals[["ticker", "date", "volatility", "trend"]]
-    stocks = stocks.merge(technicals, on="ticker", how="left")
-    return stocks
-
-
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
     authenticators, accounts, symbols = Authenticator.load(AUTHENTICATORS), Account.load(ACCOUNTS), queue.Queue()
     for ticker in tickers: symbols.put(Querys.Symbol(ticker))
@@ -70,7 +63,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=1) as source:
-        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False], uploading=True)
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False], file=PORTFOLIO)
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
@@ -78,8 +71,9 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         viability_filter = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
+        stock_calculator = StockCalculator(name="StockCalculator")
         technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=technicals)
-        market_calculator = MarketCalculator(name="MarketCalculator")
+        option_calculator = OptionCalculator(name="OptionCalculator")
         forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tight=0.15)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
@@ -96,18 +90,14 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             bars = bars_downloader([symbol], history=history)
             stocks = stock_downloader([symbol])
             technicals = technical_calculator(bars, period=period)
-
-            stock = merge(stocks, technicals).squeeze()
-            stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
-            stock["median"] = (stock["bid"] + stock["ask"]) / 2
-
+            stock = stock_calculator(stocks, technicals).squeeze()
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts)
             options["volatility"] = stock["volatility"]
             options["spot"] = stock["median"]
             options = sanity_filter(options)
-            options = market_calculator(options)
+            options = option_calculator(options)
             options = viability_filter(options)
             options = forward_calculator(options, interest=interest, dividends=dividends)
             options = valuation_calculator(options, interest=interest, dividends=dividends)
