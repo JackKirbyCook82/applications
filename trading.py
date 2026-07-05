@@ -6,28 +6,24 @@ Created on Weds Mar 18 2026
 
 """
 
-import os
 import sys
 import queue
 import logging
 import warnings
 import numpy as np
 import pandas as pd
-from enum import Enum
-from types import SimpleNamespace
-from attr.converters import to_bool
+from pathlib import Path
 from datetime import datetime as Datetime
 from datetime import timedelta as Timedelta
-from collections import namedtuple as ntuple
 
-MAIN = os.path.dirname(os.path.realpath(__file__))
-ROOT = os.path.abspath(os.path.join(MAIN, os.pardir))
-REPOSITORY = os.path.join(ROOT, "repository")
-RESOURCES = os.path.join(ROOT, "resources")
-if ROOT not in sys.path: sys.path.append(ROOT)
-AUTHENTICATORS = os.path.join(RESOURCES, "authenticators.txt")
-ACCOUNTS = os.path.join(RESOURCES, "accounts.txt")
-TICKERS = os.path.join(RESOURCES, "tickers.txt")
+ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
+REPOSITORY = ROOT / "repository"
+RESOURCES = ROOT / "resources"
+PORTFOLIO = REPOSITORY / "portfolio.csv"
+AUTHENTICATORS = RESOURCES / "authenticators.txt"
+ACCOUNTS = RESOURCES / "accounts.txt"
+TICKERS = RESOURCES / "tickers.txt"
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
@@ -42,6 +38,7 @@ from options.variances import VarianceCalculator, StandardizingCalculator
 from options.localizing import LocalizingCalculator, LocalizingVariables
 from options.spreads import SpreadCalculator, SpreadMetrics
 from options.prospects import ProspectCalculator, PriorityCalculator
+from finance.brokers import Authenticator, Account
 from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
@@ -54,18 +51,6 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-Website = Enum("Website", ["ETRADE", "ALPACA", "INTERACTIVE"])
-Brokerage = ntuple("Brokerage", {"website": Website, "live": bool})
-
-
-def load(file):
-    key = lambda website, live: Brokerage(Website[str(website).upper()], to_bool(live))
-    value = lambda header, body: SimpleNamespace(**dict(zip(header, body)))
-    contents = [str(line).split(" ") for line in open(file, "r").read().splitlines()]
-    mapping = {key(*line[:2]): value(contents[0][2:], line[2:]) for line in contents[1:]}
-    return mapping
-
-
 def merge(stocks, technicals):
     technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
     technicals = technicals.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).last()
@@ -75,7 +60,7 @@ def merge(stocks, technicals):
 
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
-    authenticators, accounts, symbols = load(AUTHENTICATORS), load(ACCOUNTS), queue.Queue()
+    authenticators, accounts, symbols = Authenticator.load(AUTHENTICATORS), Account.load(ACCOUNTS), queue.Queue()
     for ticker in tickers: symbols.put(Querys.Symbol(ticker))
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
     technicals = [Enumerations.Technical.STATS]
@@ -85,11 +70,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=1) as source:
-        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Website.ALPACA, False], uploading=True)
-        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
-        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Website.ALPACA, False])
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False], uploading=True)
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
+        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
+        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
+        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         viability_filter = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
@@ -111,9 +96,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
             bars = bars_downloader([symbol], history=history)
             stocks = stock_downloader([symbol])
             technicals = technical_calculator(bars, period=period)
+
             stock = merge(stocks, technicals).squeeze()
             stock["mean"] = (stock["bid"] * stock["demand"] + stock["ask"] * stock["supply"]) / (stock["demand"] + stock["supply"])
             stock["median"] = (stock["bid"] + stock["ask"]) / 2
+
             strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
             contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
             options = option_downloader(contracts)
@@ -144,12 +131,12 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["tickers"] = open(TICKERS, "r").read().splitlines()
+    parameters["tickers"] = TICKERS.read_text().splitlines()
     parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
     parameters["strikes"] = NumRange.create([0.95, 1.05])
+    parameters.update({"term": Enumerations.Terms.LIMIT, "tenure": Enumerations.Tenure.DAY, "intent": Enumerations.Intents.OPEN})
     parameters.update({"period": 252, "interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
-    parameters.update({"term": Enumerations.Terms.LIMIT, "tenure": Enumerations.Tenure.DAY})
     main(*arguments, **parameters)
 
 
