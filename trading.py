@@ -39,7 +39,7 @@ from options.variances import VarianceCalculator, StandardizingCalculator
 from options.localizing import LocalizingCalculator, LocalizingVariables
 from options.spreads import SpreadCalculator, SpreadMetrics
 from options.prospects import ProspectCalculator, PriorityCalculator
-from finance.brokers import Authenticator, Account
+from finance.brokers import Authenticator, Brokerage
 from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
@@ -53,7 +53,9 @@ __license__ = "MIT License"
 
 
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
-    authenticators, accounts, symbols = Authenticator.load(AUTHENTICATORS), Account.load(ACCOUNTS), queue.Queue()
+    brokerage = Brokerage(Enumerations.Website.ALPACA, False)
+    authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
+    symbols = queue.Queue()
     for ticker in tickers: symbols.put(Querys.Symbol(ticker))
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
     technicals = [Enumerations.Technical.STATS]
@@ -63,11 +65,11 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=1) as source:
-        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False], file=PORTFOLIO)
-        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
-        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
-        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
-        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticators[Enumerations.Website.ALPACA, False])
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticator, savemode=True)
+        bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticator)
+        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
+        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticator)
+        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         viability_filter = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
