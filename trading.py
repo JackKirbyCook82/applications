@@ -26,7 +26,8 @@ TICKERS = RESOURCES / "tickers.txt"
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
-from alpaca.orders import AlpacaSpreadUploader
+from alpaca.portfolio import AlpacaPortfolioDownloader, AlpacaPortfolio
+from alpaca.orders import AlpacaSpreadUploader, AlpacaOrders
 from stocks import StockCalculator
 from stocks.technicals import TechnicalCalculator
 from options import OptionCalculator, SanityFilter, ViabilityFilter
@@ -54,7 +55,8 @@ __license__ = "MIT License"
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
     brokerage = Brokerage(Enumerations.Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
-    outstanding = pd.DataFrame(columns=["group", "timestamp", "status", "tenure", "term", "identity", "ticker", "expire", "option", "strike", "position", "quantity"])
+    portfolio = pd.DataFrame(columns=AlpacaPortfolio)
+    orders = pd.DataFrame(columns=AlpacaOrders)
     symbols = queue.Queue()
     for ticker in tickers: symbols.put(Querys.Symbol(ticker))
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
@@ -65,7 +67,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
     metrics = dict(calendar=calendar, fly=fly)
 
     with WebReader(delay=1) as source:
-        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticator, savemode=True)
+        portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
+        spread_uploader = AlpacaSpreadUploader(name="SpreadUploader", source=source, authenticator=authenticator)
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticator)
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
         contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticator)
@@ -113,8 +116,7 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
                 spreads = spread_calculator(localized)
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
-                orders = spread_uploader(spreads, term=term, tenure=tenure)
-                outstanding = pd.concat([outstanding, orders], axis=0)
+                ordered = spread_uploader(spreads, term=term, tenure=tenure)
 
 
 if __name__ == "__main__":
