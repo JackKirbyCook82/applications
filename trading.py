@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
-PORTFOLIO = REPOSITORY / "portfolio.csv"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 TICKERS = RESOURCES / "tickers.txt"
@@ -55,6 +54,7 @@ __license__ = "MIT License"
 def main(*args, tickers, history, expires, strikes, period, interest, dividends, term, tenure, **kwargs):
     brokerage = Brokerage(Enumerations.Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
+    outstanding = pd.DataFrame(columns=["group", "timestamp", "status", "tenure", "term", "identity", "ticker", "expire", "option", "strike", "position", "quantity"])
     symbols = queue.Queue()
     for ticker in tickers: symbols.put(Querys.Symbol(ticker))
     spreads = [Enumerations.Spread.FLY, Enumerations.Spread.CALENDAR]
@@ -113,7 +113,8 @@ def main(*args, tickers, history, expires, strikes, period, interest, dividends,
                 spreads = spread_calculator(localized)
                 spreads = prospect_calculator(spreads)
                 spreads = priority_calculator(spreads)
-                spread_uploader(spreads, term=term, tenure=tenure)
+                orders = spread_uploader(spreads, term=term, tenure=tenure)
+                outstanding = pd.concat([outstanding, orders], axis=0)
 
 
 if __name__ == "__main__":
