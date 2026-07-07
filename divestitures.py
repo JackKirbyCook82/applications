@@ -19,11 +19,10 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 TICKERS = RESOURCES / "tickers.txt"
-ASSETS = REPOSITORY / "assets.txt"
 
 from alpaca.portfolio import AlpacaPortfolioDownloader
-from finance.brokers import Authenticator, Brokerage, Asset
-from finance.variables import Enumerations, Querys
+from finance.brokers import Authenticator, Brokerage
+from finance.variables import Enumerations
 from webscraping.webreaders import WebReader
 
 __version__ = "1.0.0"
@@ -33,17 +32,15 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def main(*args, tickers, term, tenure, **kwargs):
-    symbols = list(map(Querys.Symbol, tickers))
+def main(*args, term, tenure, **kwargs):
     brokerage = Brokerage(Enumerations.Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     intent = Enumerations.Intents.CLOSE
-    assets = Asset.load(ASSETS)
 
     with WebReader(delay=1) as source:
         portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
 
-        portfolio = portfolio_downloader(symbols)
+        portfolio = portfolio_downloader()
 
 
 if __name__ == "__main__":
@@ -53,7 +50,6 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["tickers"] = TICKERS.read_text().splitlines()
     parameters.update({"term": Enumerations.Terms.LIMIT, "tenure": Enumerations.Tenure.DAY})
     parameters.update()
     main(*arguments, **parameters)

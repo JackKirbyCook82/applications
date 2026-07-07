@@ -22,14 +22,13 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 TICKERS = RESOURCES / "tickers.txt"
-ASSETS = REPOSITORY / "assets.txt"
 
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
 from stocks import StockCalculator
 from stocks.technicals import TechnicalCalculator
 from options import OptionCalculator, SanityFilter, ViabilityFilter
-from finance.brokers import Authenticator, Brokerage, Asset
+from finance.brokers import Authenticator, Brokerage
 from finance.variables import Enumerations, Querys
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
@@ -42,11 +41,10 @@ __license__ = "MIT License"
 
 
 def main(*args, tickers, expires, history, strikes, term, tenure, period, interest, dividends, **kwargs):
-    symbols = list(map(Querys.Symbol, tickers))
+    symbols = iter(map(Querys.Symbol, tickers))
     brokerage = Brokerage(Enumerations.Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     intent = Enumerations.Intents.OPEN
-    assets = Asset.load(ASSETS)
 
     with WebReader(delay=1) as source:
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticator)
@@ -59,19 +57,19 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
         stock_calculator = StockCalculator(name="StockCalculator")
         option_calculator = OptionCalculator(name="OptionCalculator")
 
-        for symbol in symbols:
-            bars = bars_downloader([symbol], history=history)
-            technicals = technical_calculator(bars, period=period)
-            stocks = stock_downloader([symbol])
-            stock = stock_calculator(stocks, technicals).squeeze()
-            strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
-            contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
-            options = option_downloader(contracts)
-            options["volatility"] = stock["volatility"]
-            options["spot"] = stock["median"]
-            options = sanity_filter(options)
-            options = option_calculator(options)
-            options = viability_filter(options)
+        symbol = next(symbols)
+        bars = bars_downloader([symbol], history=history)
+        technicals = technical_calculator(bars, period=period)
+        stocks = stock_downloader([symbol])
+        stock = stock_calculator(stocks, technicals).squeeze()
+        strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
+        contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
+        options = option_downloader(contracts)
+        options["volatility"] = stock["volatility"]
+        options["spot"] = stock["median"]
+        options = sanity_filter(options)
+        options = option_calculator(options)
+        options = viability_filter(options)
 
 
 if __name__ == "__main__":
