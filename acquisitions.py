@@ -41,7 +41,7 @@ __license__ = "MIT License"
 
 
 def main(*args, tickers, expires, history, strikes, term, tenure, period, interest, dividends, **kwargs):
-    symbols = iter(map(Querys.Symbol, tickers))
+    symbols = list(map(Querys.Symbol, tickers))
     brokerage = Brokerage(Enumerations.Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     intent = Enumerations.Intents.OPEN
@@ -57,19 +57,24 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
         stock_calculator = StockCalculator(name="StockCalculator")
         option_calculator = OptionCalculator(name="OptionCalculator")
 
-        symbol = next(symbols)
-        bars = bars_downloader([symbol], history=history)
+        bars = bars_downloader(symbols, history=history)
         technicals = technical_calculator(bars, period=period)
-        stocks = stock_downloader([symbol])
-        stock = stock_calculator(stocks, technicals).squeeze()
-        strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
-        contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
-        options = option_downloader(contracts)
-        options["volatility"] = stock["volatility"]
-        options["spot"] = stock["median"]
-        options = sanity_filter(options)
-        options = option_calculator(options)
-        options = viability_filter(options)
+        technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
+        technicals = technicals.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).last()
+        stocks = stock_downloader(symbols)
+        stocks = stocks.merge(technicals, on=["ticker", "date"], how="left", validate="many_to_one")
+        stocks = stock_calculator(stocks)
+
+        for symbol in symbols:
+            stock = stocks[stocks["ticker"] == symbol.ticker].squeeze()
+            strikes = NumRange.create([stock["last"] * strikes.minimum, stock["last"] * strikes.maximum])
+            contracts = contract_downloader([symbol], expires=expires, strikes=strikes)
+            options = option_downloader(contracts)
+            options["volatility"] = stock["volatility"]
+            options["spot"] = stock["median"]
+            options = sanity_filter(options)
+            options = option_calculator(options)
+            options = viability_filter(options)
 
 
 if __name__ == "__main__":
