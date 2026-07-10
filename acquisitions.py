@@ -29,12 +29,13 @@ from stocks.technicals import TechnicalCalculator
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.variances import VarianceCalculator, StandardizingCalculator
 from options.localizing import LocalizingCalculator, LocalizingVariables
+from options.acquisitions import AcquisitionCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
-from finance.enumerations import Website, Intent, Technical, Terms, Tenure
+from finance.enumerations import Website, Intent, Technical, Terms, Tenure, Strategy
 from finance.querys import Symbol
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
@@ -70,6 +71,7 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
         variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, quantile=0.95, multiple=2.5)
         localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", localizing=localizing, samples=35, overlap=0.80)
         standardizing_calculator = StandardizingCalculator(name="StandardizingCalculator", neighbors=25)
+        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", proximity=1, strategies=[Strategy.FLY, Strategy.CALENDAR])
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
 
         bars = bars_downloader(symbols, history=history)
@@ -97,6 +99,7 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
             for localized in localizing_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standardizing_calculator(localized, surface)
+                acquisitions = acquisition_calculator(localized)
 
 
 if __name__ == "__main__":
