@@ -9,6 +9,7 @@ Created on Mon Jul 6 2026
 import sys
 import logging
 import warnings
+import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime as Datetime
@@ -20,15 +21,20 @@ REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
-TICKERS = RESOURCES / "tickers.txt"
 
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from alpaca.market import AlpacaStockDownloader, AlpacaOptionDownloader
 from alpaca.history import AlpacaBarsDownloader
 from stocks import StockCalculator
 from stocks.technicals import TechnicalCalculator
+from options import OptionCalculator, SanityFilter, ViabilityFilter
+from options.volatility import VolatilityCalculator
+from options.valuations import ValuationCalculator
+from options.forwards import ForwardCalculator
+from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
-from finance.variables import Enumerations, Querys
+from finance.enumerations import Website, Intent, Technical, Terms, Tenure
+from finance.querys import Contract, Symbol
 from webscraping.webreaders import WebReader
 from support.custom import DateRange
 
@@ -39,31 +45,46 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def main(*args, history, term, tenure, period, **kwargs):
-    brokerage = Brokerage(Enumerations.Website.ALPACA, False)
+def main(*args, history, term, tenure, period, interest, dividends, **kwargs):
+    brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
-    intent = Enumerations.Intents.CLOSE
 
     with WebReader(delay=1) as source:
         portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
         bars_downloader = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticator)
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
-        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Enumerations.Technical.STATS])
+        sanity_filter = SanityFilter(name="SanityFilter", size=5)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
+        technical_calculator = TechnicalCalculator(name="TechnicalCalculator", technicals=[Technical.STATS])
         stock_calculator = StockCalculator(name="StockCalculator")
+        option_calculator = OptionCalculator(name="OptionCalculator")
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tight=0.15)
+        volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
+        greek_calculator = GreekCalculator(name="GreekCalculator")
 
-        portfolio = portfolio_downloader()
-        symbols = portfolio[list(Querys.Symbol)].apply(Querys.Symbol, axis=1).to_list()
+        portfolio = portfolio_downloader.download()
+        contracts = portfolio[list(Contract)].apply(lambda series: Contract(series.to_dict()), axis=1)
+        options = option_downloader(contracts)
+        portfolio = options.merge(options, on=list(Contract), how="left", validate="many_to_one", sort=False)
+        symbols = list(map(Symbol, portfolio["ticker"].to_list()))
         bars = bars_downloader(symbols, history=history)
         technicals = technical_calculator(bars, period=period)
         technicals = technicals[technicals["date"] <= pd.Timestamp.today()]
         technicals = technicals.sort_values(["ticker", "date"]).groupby("ticker", as_index=False).last()
         stocks = stock_downloader(symbols)
-        stocks = stocks.merge(technicals, on=["ticker", "date"], how="left", validate="many_to_one")
+        stocks = stocks.merge(technicals[["ticker", "volatility", "trend"]], on="ticker", how="left", validate="many_to_one", sort=False)
         stocks = stock_calculator(stocks)
-
-        contracts = portfolio[list(Querys.Contract)].apply(Querys.Contract, axis=1).to_list()
-        options = option_downloader(contracts)
+        portfolio = portfolio.merge(stocks[["ticker", "volatility", "trend"]], on="ticker", how="left", validate="many_to_one", sort=False)
+        portfolio = portfolio.merge(stocks.rename(columns={"median": "spot"})[["ticker", "spot"]], on="ticker", how="left", validate="many_to_one", sort=False)
+        portfolio = sanity_filter(portfolio)
+        portfolio = option_calculator(portfolio)
+        portfolio = viability_filter(portfolio)
+        portfolio = forward_calculator(portfolio, interest=interest, dividends=dividends)
+        portfolio = valuation_calculator(portfolio, interest=interest, dividends=dividends)
+        portfolio = volatility_calculator(portfolio, interest=interest, dividends=dividends)
+        portfolio = greek_calculator(portfolio, interest=interest, dividends=dividends)
 
 
 if __name__ == "__main__":
@@ -74,6 +95,6 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["history"] = DateRange.create([(Datetime.today() - Timedelta(weeks=52*2)).date(), (Datetime.today() - Timedelta(days=1)).date()])
-    parameters.update({"term": Enumerations.Terms.LIMIT, "tenure": Enumerations.Tenure.DAY})
-    parameters.update({"period": 252})
+    parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
+    parameters.update({"period": 252, "interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
