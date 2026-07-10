@@ -81,7 +81,6 @@ def main(*args, history, term, tenure, period, interest, dividends, **kwargs):
         portfolio = sanity_filter(portfolio)
         portfolio = option_calculator(portfolio)
         portfolio = viability_filter(portfolio)
-        portfolio = forward_calculator(portfolio, interest=interest, dividends=dividends)
         portfolio = valuation_calculator(portfolio, interest=interest, dividends=dividends)
         portfolio = volatility_calculator(portfolio, interest=interest, dividends=dividends)
         portfolio = greek_calculator(portfolio, interest=interest, dividends=dividends)
@@ -98,3 +97,6 @@ if __name__ == "__main__":
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"period": 252, "interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
+
+
+
