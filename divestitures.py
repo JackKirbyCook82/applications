@@ -28,12 +28,11 @@ from alpaca.history import AlpacaBarsDownloader
 from stocks import StockCalculator
 from stocks.technicals import TechnicalCalculator
 from options import OptionCalculator, SanityFilter, ViabilityFilter
-from options.divestitures import DivestitureCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
-from finance.enumerations import Website, Intent, Technical, Terms, Tenure
+from finance.enumerations import Website, Technical, Terms, Tenure
 from finance.querys import Contract, Symbol
 from webscraping.webreaders import WebReader
 from support.custom import DateRange
@@ -62,9 +61,8 @@ def main(*args, history, term, tenure, period, interest, dividends, **kwargs):
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator")
 
-        portfolio = portfolio_downloader.download()
+        portfolio = portfolio_downloader()
         contracts = portfolio[list(Contract)].apply(lambda series: Contract(series.to_dict()), axis=1)
         options = option_downloader(contracts)
         portfolio = options.merge(options, on=list(Contract), how="left", validate="many_to_one", sort=False)
@@ -84,7 +82,6 @@ def main(*args, history, term, tenure, period, interest, dividends, **kwargs):
         portfolio = valuation_calculator(portfolio, interest=interest, dividends=dividends)
         portfolio = volatility_calculator(portfolio, interest=interest, dividends=dividends)
         portfolio = greek_calculator(portfolio, interest=interest, dividends=dividends)
-        divestitures = divestiture_calculator(portfolio)
 
 
 if __name__ == "__main__":
