@@ -28,7 +28,7 @@ from stocks import StockCalculator
 from stocks.technicals import TechnicalCalculator
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.variances import VarianceCalculator, StandardizingCalculator
-from options.localizing import LocalizingCalculator, LocalizingVariables
+from options.localizing import PartitioningCalculator, Localizing
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -48,7 +48,7 @@ __license__ = "MIT License"
 
 
 def main(*args, tickers, expires, history, strikes, term, tenure, period, interest, dividends, **kwargs):
-    localizing = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     symbols = list(map(Symbol, tickers))
@@ -68,7 +68,7 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
         variance_calculator = VarianceCalculator(name="VarianceCalculator", neighbors=25, quantile=0.95, multiple=2.5)
-        localizing_calculator = LocalizingCalculator(name="LocalizingCalculator", localizing=localizing, samples=35, overlap=0.80)
+        partitioning_calculator = PartitioningCalculator(name="PartitioningCalculator", localizing=localizing, samples=35, overlap=0.80)
         standardizing_calculator = StandardizingCalculator(name="StandardizingCalculator", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
 
@@ -94,7 +94,7 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
             options = volatility_calculator(options, interest=interest, dividends=dividends)
             options = greek_calculator(options, interest=interest, dividends=dividends)
             options = variance_calculator(options)
-            for localized in localizing_calculator(options):
+            for localized in partitioning_calculator(options):
                 surface = surface_creator(localized, method="regression", smoothing=1/10, weights=None)
                 localized = standardizing_calculator(localized, surface)
 
