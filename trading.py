@@ -22,23 +22,18 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 
-from solutions.markets import MarketDownloaders, MarketCalculators, MarketFilters, StocksDownloader, OptionsDownloader
-from solutions.finance import PricingCalculators, ImpliedCalculators, FinanceComputation
+from solutions.options import OptionDownloader, OptionFiltering, OptionComputation
 from solutions.localizing import LocalizingComputation
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
-from alpaca.history import AlpacaBarsDownloader
-from stocks import StockCalculator
-from stocks.technicals import TechnicalCalculator
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, ProximityCalculator, Localizing
 from options.variances import VarianceCalculator, StandardizationCalculator
 from options.volatility import VolatilityCalculator
-from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
-from finance.enumerations import Website, Technical, Terms, Tenure
+from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol
 from webscraping.webreaders import WebReader
 from support.custom import NumRange, DateRange
@@ -58,49 +53,35 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
     symbols = list(map(Symbol, tickers))
 
     with WebReader(delay=1) as source:
-        bars = AlpacaBarsDownloader(name="BarsDownloader", source=source, authenticator=authenticator)
+        portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
         stocks = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
         contracts = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticator)
         options = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
-        downloaders = MarketDownloaders(bars=bars, stocks=stocks, contracts=contracts, options=options)
-
-        technicals = TechnicalCalculator(name="TechnicalCalculator", technicals=[Technical.STATS])
-        stocks = StockCalculator(name="StockCalculator")
-        options = OptionCalculator(name="OptionCalculator")
-        calculators = MarketCalculators(technicals=technicals, stocks=stocks, options=options)
+        downloading = OptionDownloader(stocks=stocks, contracts=contracts, options=options)
 
         sanity = SanityFilter(name="SanityFilter", size=5)
+        options = OptionCalculator(name="OptionCalculator")
         viability = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
-        filters = MarketFilters(sanity=sanity, viability=viability)
-
-        valuation = ValuationCalculator(name="ValuationCalculator")
-        greeks = GreekCalculator(name="GreekCalculator")
-        pricing = PricingCalculators(valuation=valuation, greeks=greeks)
+        filtering = OptionFiltering(sanity=sanity, options=options, viability=viability)
 
         forward = ForwardCalculator(name="ForwardCalculator", samplesize=5, tightness=0.15)
         volatility = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         variance = VarianceCalculator(name="VarianceCalculator", neighbors=25, quantile=0.95, multiple=2.5)
-        implied = ImpliedCalculators(forward=forward, volatility=volatility, variance=variance)
+        greeks = GreekCalculator(name="GreekCalculator")
+        computing = OptionComputation(forward=forward, volatility=volatility, variance=variance, greeks=greeks)
 
         surface = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partitions = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
         proximity = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
         standardization = StandardizationCalculator(name="StandardizationCalculator", neighbors=25)
-
-        portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
-        stock_downloader = StocksDownloader(downloaders=downloaders, calculators=calculators)
-        option_downloader = OptionsDownloader(downloaders=downloaders, calculators=calculators, filters=filters)
-        finance_computation = FinanceComputation(pricing=pricing, implied=implied)
-        localizing_computation = LocalizingComputation(surface=surface, partitions=partitions, proximity=proximity, standardization=standardization)
+        localizing = LocalizingComputation(surface=surface, partitions=partitions, proximity=proximity, standardization=standardization)
 
         portfolio = portfolio_downloader()
         for symbol in symbols:
-            stock = stock_downloader(symbol, history=history, period=period)
-            options = option_downloader(stock, expires=expires, strikes=strikes)
-            options = finance_computation(options, interest=interest, dividends=dividends)
-            localizing = localizing_computation(options, method="regression", smoothing=1/10, weights=None)
-            for localized in localizing:
-                pass
+            options = downloading(symbol, expires=expires, strikes=strikes)
+            options = filtering(options)
+            options = computing(options, interest=interest, dividends=dividends)
+            localizing = localizing(options, method="regression", smoothing=1/10, weights=None)
 
 
 if __name__ == "__main__":
