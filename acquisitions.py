@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Jul 6 2026
-@name:   Market Application
+@name:   Trading Acquisitions Application
 @author: Jack Kirby Cook
 
 """
@@ -22,13 +22,12 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 
-from solutions.options import OptionDownloader, OptionFiltering, OptionComputation
-from solutions.localizing import LocalizingComputation
+from solutions.trading import OptionDownloading, OptionFiltering, OptionCalculating, OptionLocalizing
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, ProximityCalculator, Localizing
-from options.variances import VarianceCalculator, StandardizationCalculator
+from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.volatility import VolatilityCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
@@ -57,7 +56,7 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
         stocks = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
         contracts = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticator)
         options = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
-        downloading = OptionDownloader(stocks=stocks, contracts=contracts, options=options)
+        downloading = OptionDownloading(stocks=stocks, contracts=contracts, options=options)
 
         sanity = SanityFilter(name="SanityFilter", size=5)
         options = OptionCalculator(name="OptionCalculator")
@@ -66,22 +65,23 @@ def main(*args, tickers, expires, history, strikes, term, tenure, period, intere
 
         forward = ForwardCalculator(name="ForwardCalculator", samplesize=5, tightness=0.15)
         volatility = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
-        variance = VarianceCalculator(name="VarianceCalculator", neighbors=25, quantile=0.95, multiple=2.5)
+        variance = VarianceCalculator(name="VarianceCalculator")
+        screener = VarianceScreener(name="VarianceScreener", neighbors=25, quantile=0.95, multiple=2.5)
         greeks = GreekCalculator(name="GreekCalculator")
-        computing = OptionComputation(forward=forward, volatility=volatility, variance=variance, greeks=greeks)
+        computing = OptionCalculating(forward=forward, volatility=volatility, variance=variance, screener=screener, greeks=greeks)
 
         surface = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partitions = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
         proximity = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
-        standardization = StandardizationCalculator(name="StandardizationCalculator", neighbors=25)
-        localizing = LocalizingComputation(surface=surface, partitions=partitions, proximity=proximity, standardization=standardization)
+        localizing = OptionLocalizing(surface=surface, partitions=partitions, proximity=proximity)
+
+        standardize = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
 
         portfolio = portfolio_downloader()
         for symbol in symbols:
             options = downloading(symbol, expires=expires, strikes=strikes)
             options = filtering(options)
             options = computing(options, interest=interest, dividends=dividends)
-            localizing = localizing(options, method="regression", smoothing=1/10, weights=None)
 
 
 if __name__ == "__main__":
