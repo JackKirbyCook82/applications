@@ -20,7 +20,7 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 
-from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionForecasting
+from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
@@ -32,9 +32,10 @@ from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure
-from finance.querys import Symbol
+from finance.querys import Symbol, Contract
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
+from support.custom import ValueRanges
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -43,7 +44,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def main(*args, term, tenure, interest, dividends, **kwargs):
+def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
@@ -68,17 +69,24 @@ def main(*args, term, tenure, interest, dividends, **kwargs):
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
-        marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator, screener=variance_screener)
-        forecasting = OptionForecasting(surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
+        marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
+        surfacing = OptionSurfacer(screener=variance_screener, surface=surface_creator)
+        forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
 
         portfolio = portfolio_downloader()
         for ticker, holdings in portfolio.groupby("ticker"):
             symbol = Symbol(ticker)
-            options = downloading(symbol, expires=, strikes=)
+            expire = ValueRanges.Date(holdings["expire"].min(), holdings["expire"].max())
+            options = downloading(symbol, expire=expire, expires=expires, strikes=strikes)
             options = filtering(options)
             options = marketing(options, interest=interest, dividends=dividends)
 
-#            localized = forecasting(localized, interest=interest, dividends=dividends)
+#            TO BIG OF A SURFACE
+#            holdings = holdings.merge(options, on=list(Contract), how="left", validate="many_to_one")
+#            localized = proximity_calculator(options, holdings)
+#            surface = surfacing(localized, method="regression", smoothing=1 / 10, weights=None)
+#            localized = forecasting(localized, surface, interest=interest, dividends=dividends)
+#            holdings = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
 
 
 if __name__ == "__main__":
@@ -88,8 +96,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["expires"] =
-    parameters["strikes"] =
+    parameters["expires"] = ValueRanges.Number(-5, 5)
+    parameters["strikes"] = ValueRanges.Percent(-0.95, 1.05)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)

@@ -22,7 +22,7 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 
-from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionForecasting
+from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Localizing
@@ -35,7 +35,7 @@ from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol
 from webscraping.webreaders import WebReader
-from support.custom import NumRange, DateRange
+from support.custom import ValueRanges
 from support.surface import SurfaceCreator
 
 __version__ = "1.0.0"
@@ -45,7 +45,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
+def main(*args, tickers, expire, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
@@ -70,15 +70,17 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
-        marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator, screener=variance_screener)
-        forecasting = OptionForecasting(surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
+        marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
+        surfacing = OptionSurfacer(screener=variance_screener, surface=surface_creator)
+        forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
 
         for symbol in symbols:
-            options = downloading(symbol, expires=expires, strikes=strikes)
+            options = downloading(symbol, expire=expire, expires=expires, strikes=strikes)
             options = filtering(options)
             options = marketing(options, interest=interest, dividends=dividends)
             for localized in partition_calculator(options):
-                localized = forecasting(localized, interest=interest, dividends=dividends)
+                surface = surfacing(localized, method="regression", smoothing=1/10, weights=None)
+                localized = forecasting(localized, surface, interest=interest, dividends=dividends)
 
 
 if __name__ == "__main__":
@@ -89,8 +91,9 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["tickers"] = ["SPY", "QQQ", "TSLA", "NVDA"]
-    parameters["expires"] = DateRange.create([(Datetime.today() + Timedelta(days=1)).date(), (Datetime.today() + Timedelta(weeks=52*1/12)).date()])
-    parameters["strikes"] = NumRange.create([0.95, 1.05])
+    parameters["expire"] = Datetime.today() + Timedelta(weeks=26)
+    parameters["expires"] = ValueRanges.Duration(Timedelta(weeks=-24), Timedelta(weeks=24))
+    parameters["strikes"] = ValueRanges.Percent(-0.95, 1.05)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
