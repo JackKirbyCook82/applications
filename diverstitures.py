@@ -12,6 +12,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from datetime import timedelta as Timedelta
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
@@ -35,7 +36,6 @@ from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol, Contract
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
-from support.custom import ValueRanges
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -76,8 +76,9 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
         portfolio = portfolio_downloader()
         for ticker, holdings in portfolio.groupby("ticker"):
             symbol = Symbol(ticker)
-            expire = ValueRanges.Date(holdings["expire"].min(), holdings["expire"].max())
-            options = downloading(symbol, expire=expire, expires=expires, strikes=strikes)
+            expire =
+            strike =
+            options = downloading(symbol, expire=expire, strike=strike, expires=expires, strikes=strikes)
             options = filtering(options)
             options = marketing(options, interest=interest, dividends=dividends)
 
@@ -96,8 +97,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["expires"] = ValueRanges.Number(-5, 5)
-    parameters["strikes"] = ValueRanges.Percent(-0.95, 1.05)
+    parameters["expires"] = lambda *args, expire, **kwargs: (expire.lower + Timedelta(weeks=-5), expire.upper + Timedelta(weeks=+5))
+    parameters["strikes"] = lambda *args, strike, **kwargs: (0.95 * strike.lower, 1.05 * strike.upper)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
