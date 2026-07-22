@@ -35,6 +35,7 @@ from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
+from support.custom import DateRange, NumberRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -89,8 +90,8 @@ if __name__ == "__main__":
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
     parameters["tickers"] = ["SPY", "QQQ", "TSLA", "NVDA"]
-    parameters["expires"] = lambda *args, today, **kwargs: (today + Timedelta(weeks=1), today + Timedelta(weeks=52))
-    parameters["strikes"] = lambda *args, underlying, **kwargs: (0.95 * underlying, 1.05 * underlying)
+    parameters["expires"] = lambda tomorrow: DateRange(tomorrow + Timedelta(weeks=1), tomorrow + Timedelta(weeks=52))
+    parameters["strikes"] = lambda underlying: NumberRange(0.95 * underlying, 1.05 * underlying)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)

@@ -36,6 +36,7 @@ from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol, Contract
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
+from support.custom import DateRange, NumberRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -74,20 +75,19 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
         forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
 
         portfolio = portfolio_downloader()
-        for ticker, holdings in portfolio.groupby("ticker"):
+        for ticker, exposure in portfolio.groupby("ticker"):
             symbol = Symbol(ticker)
-            expire =
-            strike =
-            options = downloading(symbol, expire=expire, strike=strike, expires=expires, strikes=strikes)
-            options = filtering(options)
-            options = marketing(options, interest=interest, dividends=dividends)
-
-#            TO BIG OF A SURFACE
-#            holdings = holdings.merge(options, on=list(Contract), how="left", validate="many_to_one")
-#            localized = proximity_calculator(options, holdings)
-#            surface = surfacing(localized, method="regression", smoothing=1 / 10, weights=None)
-#            localized = forecasting(localized, surface, interest=interest, dividends=dividends)
-#            holdings = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
+            for order, holdings in exposure.groupby("order"):
+                expires = expires(DateRange(holdings["expires"].to_list()))
+                strikes = strikes(NumberRange(holdings["strikes"].to_list()))
+                options = downloading(symbol, expires=expires, strikes=strikes)
+                options = filtering(options)
+                options = marketing(options, interest=interest, dividends=dividends)
+                holdings = holdings.merge(options, on=list(Contract), how="left", validate="many_to_one")
+                localized = proximity_calculator(options, holdings)
+                surface = surfacing(localized, method="regression", smoothing=1 / 10, weights=None)
+                localized = forecasting(localized, surface, interest=interest, dividends=dividends)
+                holdings = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
 
 
 if __name__ == "__main__":
@@ -97,8 +97,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["expires"] = lambda *args, expire, **kwargs: (expire.lower + Timedelta(weeks=-5), expire.upper + Timedelta(weeks=+5))
-    parameters["strikes"] = lambda *args, strike, **kwargs: (0.95 * strike.lower, 1.05 * strike.upper)
+    parameters["expires"] = lambda expires: DateRange(expires.minimum + Timedelta(weeks=-5), expires.maximum + Timedelta(weeks=+5))
+    parameters["strikes"] = lambda strikes: NumberRange(0.95 * strikes.minimum, 1.05 * strikes.maximum)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
