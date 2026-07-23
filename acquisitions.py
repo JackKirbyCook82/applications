@@ -26,12 +26,13 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
+from options.acquisitions import AcquisitionCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
-from finance.enumerations import Website, Terms, Tenure
+from finance.enumerations import Website, Terms, Tenure, Spread
 from finance.querys import Symbol
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
@@ -66,6 +67,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
+        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=list(Spread), metrics=None)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
@@ -80,6 +82,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
             for localized in partition_calculator(options):
                 surface = surfacing(localized, method="regression", smoothing=1/10, weights=None)
                 localized = forecasting(localized, surface, interest=interest, dividends=dividends)
+                prospects = acquisition_calculator(localized)
 
 
 if __name__ == "__main__":
