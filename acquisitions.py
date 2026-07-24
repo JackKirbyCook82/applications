@@ -26,7 +26,8 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
-from options.acquisitions import AcquisitionCalculator
+from options.acquisitions import AcquisitionCreators
+from options.prospects import ProspectCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -49,6 +50,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
+    acquisitions = AcquisitionCreators(spreads=[Spread.FLY, Spread.CALENDAR], limit=1)
     symbols = list(map(Symbol, tickers))
 
     with WebReader(delay=1) as source:
@@ -67,7 +69,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
-        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=list(Spread), metrics=None)
+        prospect_calculator = ProspectCalculator(name="DivestitureCalculator", creators=acquisitions, metrics=None, priority=None)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
@@ -82,7 +84,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
             for localized in partition_calculator(options):
                 surface = surfacing(localized, method="regression", smoothing=1/10, weights=None)
                 localized = forecasting(localized, surface, interest=interest, dividends=dividends)
-                prospects = acquisition_calculator(localized)
+                prospects = prospect_calculator(localized)
 
 
 if __name__ == "__main__":

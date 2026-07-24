@@ -27,13 +27,14 @@ from alpaca.portfolio import AlpacaPortfolioDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import ProximityCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
-from options.divestitures import DivestitureCalculator
+from options.divestitures import DivestitureCreators
+from options.prospects import ProspectCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
 from finance.brokers import Authenticator, Brokerage
-from finance.enumerations import Website, Terms, Tenure
+from finance.enumerations import Website, Terms, Tenure, Spread
 from finance.querys import Symbol, Contract
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
@@ -50,6 +51,7 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
+    divestitures = DivestitureCreators(spreads=[Spread.FLY, Spread.CALENDAR])
 
     with WebReader(delay=1) as source:
         portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
@@ -68,7 +70,7 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
-        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=None)
+        prospect_calculator = ProspectCalculator(name="DivestitureCalculator", creators=divestitures, metrics=None, priority=None)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
@@ -87,10 +89,10 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
             holdings = holdings.merge(options, on=list(Contract), how="left", validate="many_to_one")
             for order, holding in holdings.groupby("order"):
                 localized = proximity_calculator(options, holding)
-                surface = surfacing(localized, method="regression", smoothing=1 / 10, weights=None)
+                surface = surfacing(localized, method="regression", smoothing=1/10, weights=None)
                 localized = forecasting(localized, surface, interest=interest, dividends=dividends)
                 holding = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
-                prospects = divestiture_calculator(holding)
+                prospects = prospect_calculator(holding)
 
 
 if __name__ == "__main__":
