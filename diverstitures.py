@@ -94,6 +94,10 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
                 holding = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
                 prospects = prospect_calculator(holding)
 
+                # STOP FOR TESTING
+                for prospect in prospects: print(str(prospect))
+                return
+
 
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])

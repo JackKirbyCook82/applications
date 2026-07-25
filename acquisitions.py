@@ -86,6 +86,10 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
                 localized = forecasting(localized, surface, interest=interest, dividends=dividends)
                 prospects = prospect_calculator(localized)
 
+                # STOP FOR TESTING
+                for prospect in prospects: print(str(prospect))
+                return
+
 
 if __name__ == "__main__":
     logging.basicConfig(level="INFO", format="[%(levelname)s, %(threadName)s]:  %(message)s", handlers=[logging.StreamHandler(sys.stdout)])
