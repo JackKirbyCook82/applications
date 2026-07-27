@@ -27,8 +27,8 @@ from alpaca.portfolio import AlpacaPortfolioDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import ProximityCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
+from options.prospects import ProspectCalculator, Slippage, Costing
 from options.divestitures import DivestitureCreators
-from options.prospects import ProspectCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -52,6 +52,7 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     divestitures = DivestitureCreators(spreads=[Spread.FLY, Spread.CALENDAR])
+    costing = Costing(slippage=Slippage(entry=0.25, exit=0.35), commissions=0.65)
 
     with WebReader(delay=1) as source:
         portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)

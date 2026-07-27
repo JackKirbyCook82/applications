@@ -26,8 +26,8 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
+from options.prospects import ProspectCalculator, Slippage, Costing
 from options.acquisitions import AcquisitionCreators
-from options.prospects import ProspectCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -51,6 +51,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     acquisitions = AcquisitionCreators(spreads=[Spread.FLY, Spread.CALENDAR], limit=1)
+    costing = Costing(slippage=Slippage(entry=0.25, exit=0.35), commissions=0.65)
     symbols = list(map(Symbol, tickers))
 
     with WebReader(delay=1) as source:
