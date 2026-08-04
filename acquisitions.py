@@ -27,7 +27,7 @@ from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.prospects import ProspectCalculator, Slippage, Costing
-from options.acquisitions import AcquisitionCreators
+from options.acquisitions import AcquisitionCreators, Metrics, Weights, Targets, Priority
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
@@ -47,11 +47,15 @@ __license__ = "MIT License"
 
 
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
-    localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    localizing = Localizing(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
-    acquisitions = AcquisitionCreators(spreads=[Spread.FLY, Spread.CALENDAR], limit=1)
     costing = Costing(slippage=Slippage(entry=0.25, exit=0.35), commissions=0.65)
+    creators = AcquisitionCreators(spreads=[Spread.FLY, Spread.CALENDAR], costing=costing, limit=1)
+    metrics = Metrics(zspread=2.0, multiple=2.0, ratio=10.0)
+    targets = Targets(zspread=3.0, multiple=4.0, ratio=20.0)
+    weights = Weights(zspread=0.20, multiple=0.30, ratio=0.35)
+    priority = Priority(targets=targets, weights=weights)
     symbols = list(map(Symbol, tickers))
 
     with WebReader(delay=1) as source:
@@ -70,7 +74,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
-        prospect_calculator = ProspectCalculator(name="DivestitureCalculator", creators=acquisitions, metrics=None, priority=None)
+        prospect_calculator = ProspectCalculator(name="DivestitureCalculator", creators=creators, metrics=metrics, priority=priority)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
@@ -87,8 +91,6 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
                 localized = forecasting(localized, surface, interest=interest, dividends=dividends)
                 prospects = prospect_calculator(localized)
 
-                # STOP FOR TESTING
-                for prospect in prospects: print(str(prospect))
                 return
 
 
