@@ -20,11 +20,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
+ORDERS = REPOSITORY / "orders"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 
 from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
+from alpaca.orders import AlpacaOrderUploader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Variables
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
@@ -38,8 +40,8 @@ from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure, Spread
 from finance.querys import Symbol
 from webscraping.webreaders import WebReader
-from support.surface import SurfaceCreator
 from support.custom import DateRange, NumberRange
+from support.surface import SurfaceCreator
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -101,6 +103,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", variables=variables, samples=35, overlap=0.80)
         acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metrics=metrics, priority=priority, limit=1)
+        acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
@@ -113,6 +116,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         for options in marketing(symbols, expires=expires, strikes=strikes, interest=interest, dividends=dividends):
             for localized in localizing(options, interest=interest, dividends=dividends):
                 acquisitions = acquisition_calculator(localized)
+                orders = acquisition_uploader(acquisitions, term=term, tenure=tenure)
 
 
 if __name__ == "__main__":
