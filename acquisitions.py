@@ -12,6 +12,8 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from typing import Callable
+from dataclasses import dataclass
 from datetime import timedelta as Timedelta
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,14 +26,14 @@ ACCOUNTS = RESOURCES / "accounts.txt"
 from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
-from options.localizing import PartitionCalculator, Localizing
+from options.localizing import PartitionCalculator, Variables
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
-from options.prospects import ProspectCalculator, Slippage, Costing
-from options.acquisitions import AcquisitionCreators, Metrics, Weights, Targets, Priority
+from options.acquisitions import AcquisitionCalculator, Metrics, Weights, Targets, Priority
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
+from options.prospects import Slippage, Costing
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure, Spread
 from finance.querys import Symbol
@@ -46,16 +48,40 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+@dataclass(frozen=True)
+class Marketing:
+    downloading: Callable; filtering: Callable; marketing: Callable
+
+    def __call__(self, symbols, /, expires, strikes, interest, dividends):
+        for symbol in symbols:
+            options = self.downloading(symbol, expires=expires, strikes=strikes)
+            options = self.filtering(options)
+            options = self.marketing(options, interest=interest, dividends=dividends)
+            yield options
+
+
+@dataclass(frozen=True)
+class Localizing:
+    partitions: Callable; surfacing: Callable; forecasting: Callable
+
+    def __call__(self, options, /, interest, dividends):
+        for localized in self.partitions(options):
+            surface = self.surfacing(localized, method="regression", smoothing=1 / 10, weights=None)
+            localized = self.forecasting(localized, surface, interest=interest, dividends=dividends)
+            yield localized
+
+
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
-    localizing = Localizing(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    variables = Variables(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    slippage = Slippage(entry=0.25, exit=0.35)
+    costing = Costing(slippage=slippage, commissions=0.65)
+    metrics = Metrics(zspread=2.0, multiple=3.0, ratio=10.0)
+    targets = Targets(zspread=3.0, multiple=5.0, ratio=20.0)
+    weights = Weights(zspread=0.30, multiple=0.30, ratio=0.40)
+    priority = Priority(targets=targets, weights=weights)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
-    costing = Costing(slippage=Slippage(entry=0.25, exit=0.35), commissions=0.65)
-    creators = AcquisitionCreators(spreads=[Spread.FLY, Spread.CALENDAR], costing=costing, limit=1)
-    metrics = Metrics(zspread=2.0, multiple=2.0, ratio=10.0)
-    targets = Targets(zspread=3.0, multiple=4.0, ratio=20.0)
-    weights = Weights(zspread=0.20, multiple=0.30, ratio=0.35)
-    priority = Priority(targets=targets, weights=weights)
+    spreads = [Spread.FLY, Spread.CALENDAR]
     symbols = list(map(Symbol, tickers))
 
     with WebReader(delay=1) as source:
@@ -73,25 +99,20 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         variance_screener = VarianceScreener(name="VarianceScreener", neighbors=25, quantile=0.95, multiple=2.5)
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
-        partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
-        prospect_calculator = ProspectCalculator(name="DivestitureCalculator", creators=creators, metrics=metrics, priority=priority)
+        partition_calculator = PartitionCalculator(name="PartitionCalculator", variables=variables, samples=35, overlap=0.80)
+        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metrics=metrics, priority=priority, limit=1)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
         marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
         surfacing = OptionSurfacer(screener=variance_screener, surface=surface_creator)
         forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
+        marketing = Marketing(downloading, filtering, marketing)
+        localizing = Localizing(partition_calculator, surfacing, forecasting)
 
-        for symbol in symbols:
-            options = downloading(symbol, expires=expires, strikes=strikes)
-            options = filtering(options)
-            options = marketing(options, interest=interest, dividends=dividends)
-            for localized in partition_calculator(options):
-                surface = surfacing(localized, method="regression", smoothing=1/10, weights=None)
-                localized = forecasting(localized, surface, interest=interest, dividends=dividends)
-                prospects = prospect_calculator(localized)
-
-                return
+        for options in marketing(symbols, expires=expires, strikes=strikes, interest=interest, dividends=dividends):
+            for localized in localizing(options, interest=interest, dividends=dividends):
+                acquisitions = acquisition_calculator(localized)
 
 
 if __name__ == "__main__":

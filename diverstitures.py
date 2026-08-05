@@ -12,6 +12,8 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from typing import Callable
+from dataclasses import dataclass
 from datetime import timedelta as Timedelta
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,16 +27,16 @@ from solutions.options import OptionDownloading, OptionFiltering, OptionMarketin
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
-from options.localizing import ProximityCalculator, Localizing
+from options.localizing import ProximityCalculator, Variables
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
-from options.prospects import ProspectCalculator, Slippage, Costing
-from options.divestitures import DivestitureCreators, Metrics, Weights, Targets, Priority
+from options.divestitures import DivestitureCalculator, Metrics, Weights, Targets, Priority, Mode
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
+from options.prospects import Slippage, Costing
 from finance.brokers import Authenticator, Brokerage
-from finance.enumerations import Website, Terms, Tenure, Spread
+from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol, Contract
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
@@ -47,16 +49,42 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+@dataclass(frozen=True)
+class Marketing:
+    downloading: Callable; filtering: Callable; marketing: Callable
+
+    def __call__(self, symbol, holdings, /, expires, strikes, interest, dividends):
+        expires = expires(DateRange(holdings["expires"].to_list()))
+        strikes = strikes(NumberRange(holdings["strikes"].to_list()))
+        options = self.downloading(symbol, expires=expires, strikes=strikes)
+        options = self.filtering(options)
+        options = self.marketing(options, interest=interest, dividends=dividends)
+        return options
+
+
+@dataclass(frozen=True)
+class Localizing:
+    proximitys: Callable; surfacing: Callable; forecasting: Callable
+
+    def __call__(self, options, holdings, /, interest, dividends):
+        for order, localized in holdings.groupby("order"):
+            proximity = self.proximitys(options, localized)
+            surface = self.surfacing(proximity, method="regression", smoothing=1 / 10, weights=None)
+            localized = self.forecasting(proximity, surface, interest=interest, dividends=dividends)
+            localized = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
+            yield localized
+
+
 def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
-    localizing = Localizing(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    variables = Variables(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    slippage = Slippage(entry=0.25, exit=0.35)
+    costing = Costing(slippage=slippage, commissions=0.65)
+    metrics = Metrics(multiple=0.75, ratio=0.75, mode=Mode.ANY)
+    targets = Targets(multiple=1.00, ratio=1.00)
+    weights = Weights(multiple=0.45, ratio=0.55)
+    priority = Priority(targets=targets, weights=weights)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
-    costing = Costing(slippage=Slippage(entry=0.25, exit=0.35), commissions=0.65)
-    creators = DivestitureCreators(spreads=[Spread.FLY, Spread.CALENDAR], costing=costing)
-    metrics = Metrics()
-    targets = Targets()
-    weights = Weights()
-    priority = Priority(targets=targets, weights=weights)
 
     with WebReader(delay=1) as source:
         portfolio_downloader = AlpacaPortfolioDownloader(name="PortfolioDownloader", source=source, authenticator=authenticator)
@@ -74,32 +102,24 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
         variance_screener = VarianceScreener(name="VarianceScreener", neighbors=25, quantile=0.95, multiple=2.5)
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
-        proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
-        prospect_calculator = ProspectCalculator(name="DivestitureCalculator", creators=creators, metrics=metrics, priority=priority)
+        proximity_calculator = ProximityCalculator(name="ProximityCalculator", variables=variables, samples=35, overlap=0.80)
+        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", costing=costing, metrics=metrics, priority=priority)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
         marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
         surfacing = OptionSurfacer(screener=variance_screener, surface=surface_creator)
         forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
+        marketing = Marketing(downloading, filtering, marketing)
+        localizing = Localizing(proximity_calculator, surfacing, forecasting)
 
         portfolio = portfolio_downloader()
         for ticker, holdings in portfolio.groupby("ticker"):
             symbol = Symbol(ticker)
-            expires = expires(DateRange(holdings["expires"].to_list()))
-            strikes = strikes(NumberRange(holdings["strikes"].to_list()))
-            options = downloading(symbol, expires=expires, strikes=strikes)
-            options = filtering(options)
-            options = marketing(options, interest=interest, dividends=dividends)
-            holdings = holdings.merge(options, on=list(Contract), how="left", validate="many_to_one")
-            for order, holding in holdings.groupby("order"):
-                localized = proximity_calculator(options, holding)
-                surface = surfacing(localized, method="regression", smoothing=1/10, weights=None)
-                localized = forecasting(localized, surface, interest=interest, dividends=dividends)
-                holding = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
-                prospects = prospect_calculator(holding)
-
-                return
+            options = marketing(symbol, holdings, expires=expires, strikes=strikes, interest=interest, dividends=dividends)
+            localized = localizing(options, holdings, interest=interest, dividends=dividends)
+            localized = list(localized)
+            divestitures = divestiture_calculator(localized)
 
 
 if __name__ == "__main__":
