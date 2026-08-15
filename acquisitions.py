@@ -20,13 +20,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
-ORDERS = REPOSITORY / "orders"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
+ORDERS = REPOSITORY / "orders"
 
 from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
-from alpaca.orders import AlpacaOrderUploader
+from alpaca.orders import AlpacaOrderUploader, AlpacaOrderUploadingFile
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Variables
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
@@ -81,6 +81,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     targets = Targets(zspread=3.0, multiple=5.0, ratio=20.0)
     weights = Weights(zspread=0.30, multiple=0.30, ratio=0.40)
     priority = Priority(targets=targets, weights=weights)
+    file = AlpacaOrderUploadingFile(file=ORDERS)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     spreads = [Spread.FLY, Spread.CALENDAR]
@@ -103,7 +104,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", variables=variables, samples=35, overlap=0.80)
         acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metrics=metrics, priority=priority, limit=1)
-        acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
+        acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, file=file, authenticator=authenticator)
 
         downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
