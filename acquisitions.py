@@ -12,8 +12,6 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Callable
-from dataclasses import dataclass
 from datetime import timedelta as Timedelta
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -24,9 +22,9 @@ AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 ORDERS = REPOSITORY / "orders"
 
-from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
+from solutions.options import OptionDownloading, OptionFiltering, OptionPricing, OptionValuing
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
-from alpaca.orders import AlpacaOrderUploader, AlpacaOrderUploadingFile
+from alpaca.orders import AlpacaOrderUploader, AlpacaOrderFile
 from options import OptionCalculator, SanityFilter, ViabilityFilter
 from options.localizing import PartitionCalculator, Variables
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
@@ -50,29 +48,6 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-@dataclass(frozen=True)
-class Marketing:
-    downloading: Callable; filtering: Callable; marketing: Callable
-
-    def __call__(self, symbols, /, expires, strikes, interest, dividends):
-        for symbol in symbols:
-            options = self.downloading(symbol, expires=expires, strikes=strikes)
-            options = self.filtering(options)
-            options = self.marketing(options, interest=interest, dividends=dividends)
-            yield options
-
-
-@dataclass(frozen=True)
-class Localizing:
-    partitions: Callable; surfacing: Callable; forecasting: Callable
-
-    def __call__(self, options, /, interest, dividends):
-        for localized in self.partitions(options):
-            surface = self.surfacing(localized, method="regression", smoothing=1 / 10, weights=None)
-            localized = self.forecasting(localized, surface, interest=interest, dividends=dividends)
-            yield localized
-
-
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
     variables = Variables(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = Slippage(entry=0.25, exit=0.35)
@@ -81,11 +56,9 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     targets = Targets(zspread=3.0, multiple=5.0, ratio=20.0)
     weights = Weights(zspread=0.30, multiple=0.30, ratio=0.40)
     priority = Priority(targets=targets, weights=weights)
-    file = AlpacaOrderUploadingFile(file=ORDERS)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     spreads = [Spread.FLY, Spread.CALENDAR]
-    symbols = list(map(Symbol, tickers))
 
     with WebReader(delay=1) as source:
         stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
@@ -104,20 +77,25 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", variables=variables, samples=35, overlap=0.80)
         acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metrics=metrics, priority=priority, limit=1)
-        acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, file=file, authenticator=authenticator)
+        acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
+        acquisition_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
-        downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
-        filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
-        marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
-        surfacing = OptionSurfacer(screener=variance_screener, surface=surface_creator)
-        forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
-        marketing = Marketing(downloading, filtering, marketing)
-        localizing = Localizing(partition_calculator, surfacing, forecasting)
+        option_downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
+        option_filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
+        option_pricing = OptionPricing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
+        option_valuing = OptionValuing(screen=variance_screener, surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
 
-        for options in marketing(symbols, expires=expires, strikes=strikes, interest=interest, dividends=dividends):
-            for localized in localizing(options, interest=interest, dividends=dividends):
+        symbols = list(map(Symbol, tickers))
+        for symbol in symbols:
+            options = option_downloading(symbol, expires=expires, strikes=strikes)
+            options = option_filtering(options)
+            options = option_pricing(options, interest=interest, dividends=dividends)
+            for localized in partition_calculator(options):
+                localized = option_valuing(localized, interest=interest, dividends=dividends, method="regression", smoothing=1/10, weights=None)
                 acquisitions = acquisition_calculator(localized)
-                orders = acquisition_uploader(acquisitions, term=term, tenure=tenure)
+                orders = acquisition_uploader(acquisitions, term=term, tenure=tenure, dryrun=True)
+                acquisition_file.save(orders, mode="a")
+                return
 
 
 if __name__ == "__main__":

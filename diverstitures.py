@@ -12,8 +12,6 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Callable
-from dataclasses import dataclass
 from datetime import timedelta as Timedelta
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -23,7 +21,7 @@ RESOURCES = ROOT / "resources"
 AUTHENTICATORS = RESOURCES / "authenticators.txt"
 ACCOUNTS = RESOURCES / "accounts.txt"
 
-from solutions.options import OptionDownloading, OptionFiltering, OptionMarketing, OptionSurfacer, OptionForecasting
+from solutions.options import OptionDownloading, OptionFiltering, OptionPricing, OptionValuing
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from options import OptionCalculator, SanityFilter, ViabilityFilter
@@ -49,33 +47,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-@dataclass(frozen=True)
-class Marketing:
-    downloading: Callable; filtering: Callable; marketing: Callable
-
-    def __call__(self, symbol, holdings, /, expires, strikes, interest, dividends):
-        expires = expires(DateRange(holdings["expires"].to_list()))
-        strikes = strikes(NumberRange(holdings["strikes"].to_list()))
-        options = self.downloading(symbol, expires=expires, strikes=strikes)
-        options = self.filtering(options)
-        options = self.marketing(options, interest=interest, dividends=dividends)
-        return options
-
-
-@dataclass(frozen=True)
-class Localizing:
-    proximitys: Callable; surfacing: Callable; forecasting: Callable
-
-    def __call__(self, options, holdings, /, interest, dividends):
-        for order, localized in holdings.groupby("order"):
-            proximity = self.proximitys(options, localized)
-            surface = self.surfacing(proximity, method="regression", smoothing=1 / 10, weights=None)
-            localized = self.forecasting(proximity, surface, interest=interest, dividends=dividends)
-            localized = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
-            yield localized
-
-
-def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
+def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     variables = Variables(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65)
@@ -105,21 +77,23 @@ def main(*args, expires, strikes, term, tenure, interest, dividends, **kwargs):
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", variables=variables, samples=35, overlap=0.80)
         divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", costing=costing, metrics=metrics, priority=priority)
 
-        downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
-        filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
-        marketing = OptionMarketing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
-        surfacing = OptionSurfacer(screener=variance_screener, surface=surface_creator)
-        forecasting = OptionForecasting(standardize=variance_standardizer, valuation=valuation_calculator)
-        marketing = Marketing(downloading, filtering, marketing)
-        localizing = Localizing(proximity_calculator, surfacing, forecasting)
+        option_downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
+        option_filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
+        option_pricing = OptionPricing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
+        option_valuing = OptionValuing(screen=variance_screener, surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
 
         portfolio = portfolio_downloader()
         for ticker, holdings in portfolio.groupby("ticker"):
             symbol = Symbol(ticker)
-            options = marketing(symbol, holdings, expires=expires, strikes=strikes, interest=interest, dividends=dividends)
-            localized = localizing(options, holdings, interest=interest, dividends=dividends)
-            localized = list(localized)
-            divestitures = divestiture_calculator(localized)
+            expires = expire(DateRange(holdings["expires"].to_list()))
+            strikes = strike(NumberRange(holdings["strikes"].to_list()))
+            options = option_downloading(symbol, expires=expires, strikes=strikes)
+            options = option_filtering(options)
+            options = option_pricing(options, interest=interest, dividends=dividends)
+            for order, holding in holdings.groupby("order"):
+                localized = proximity_calculator(options, holding)
+                localized = option_valuing(localized, interest=interest, dividends=dividends, method="regression", smoothing=1/10, weights=None)
+                localized = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
 
 
 if __name__ == "__main__":
@@ -129,8 +103,8 @@ if __name__ == "__main__":
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
     arguments, parameters = list(), dict()
-    parameters["expires"] = lambda expires: DateRange(expires.minimum + Timedelta(weeks=-5), expires.maximum + Timedelta(weeks=+5))
-    parameters["strikes"] = lambda strikes: NumberRange(0.95 * strikes.minimum, 1.05 * strikes.maximum)
+    parameters["expire"] = lambda expires: DateRange(expires.minimum + Timedelta(weeks=-5), expires.maximum + Timedelta(weeks=+5))
+    parameters["strike"] = lambda strikes: NumberRange(0.95 * strikes.minimum, 1.05 * strikes.maximum)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
     parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
     main(*arguments, **parameters)
