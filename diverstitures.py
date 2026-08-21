@@ -55,6 +55,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     targets = Targets(multiple=1.00, ratio=1.00)
     weights = Weights(multiple=0.45, ratio=0.55)
     priority = Priority(targets=targets, weights=weights)
+    valuing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
 
@@ -90,10 +91,11 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
             options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
-            for order, holding in holdings.groupby("order"):
-                localized = proximity_calculator(options, holding)
-                localized = option_valuing(localized, interest=interest, dividends=dividends, method="regression", smoothing=1/10, weights=None)
-                localized = holdings.merge(localized, on=list(Contract), how="left", validate="many_to_one")
+
+#            for order, holding in holdings.groupby("order"):
+#                proximity = proximity_calculator(options, holding)
+#                proximity = option_valuing(proximity, interest=interest, dividends=dividends, **valuing)
+#                proximity = holdings.merge(proximity, on=list(Contract), how="left", validate="many_to_one")
 
 
 if __name__ == "__main__":

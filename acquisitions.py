@@ -56,6 +56,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     targets = Targets(zspread=3.0, multiple=5.0, ratio=20.0)
     weights = Weights(zspread=0.30, multiple=0.30, ratio=0.40)
     priority = Priority(targets=targets, weights=weights)
+    valuing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
     spreads = [Spread.FLY, Spread.CALENDAR]
@@ -90,9 +91,9 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
             options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
-            for localized in partition_calculator(options):
-                localized = option_valuing(localized, interest=interest, dividends=dividends, method="regression", smoothing=1/10, weights=None)
-                acquisitions = acquisition_calculator(localized)
+            for partition in partition_calculator(options):
+                partition = option_valuing(partition, interest=interest, dividends=dividends, **valuing)
+                acquisitions = acquisition_calculator(partition)
                 orders = acquisition_uploader(acquisitions, term=term, tenure=tenure, dryrun=True)
                 acquisition_file.save(orders, mode="a")
                 return
