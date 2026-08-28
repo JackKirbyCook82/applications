@@ -50,9 +50,9 @@ __license__ = "MIT License"
 
 
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
-    localizing = LocalizingVariables(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    localizing = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = ProspectSlippage(entry=0.25, exit=0.35)
-    costing = ProspectCosting(slippage=slippage, commissions=0.65)
+    costing = ProspectCosting(slippage=slippage, commissions=0.65 / 100)
     acquiring = AcquisitionMetric(zspread=1.5, multiple=2.0, ratio=5.0)
     viability = ViabilityMetric(moneyness=0.15, tightness=0.15, activity=0.30)
     valuing = dict(method="regression", smoothing=1/10, weights=None)
@@ -66,7 +66,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", metric=viability)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -76,7 +76,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
-        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metrics=acquiring, limit=1)
+        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metric=acquiring, limit=1)
         acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         acquisition_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
