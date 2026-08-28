@@ -3,6 +3,7 @@
 Created on Mon Jul 6 2026
 @name:   Trading Divestitures Application
 @author: Jack Kirby Cook
+@file:   applications/diverstitures.py
 
 """
 
