@@ -53,7 +53,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     localizing = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = ProspectSlippage(entry=0.25, exit=0.35)
     costing = ProspectCosting(slippage=slippage, commissions=0.65 / 100)
-    acquiring = AcquisitionMetric(zspread=1.5, multiple=2.0, ratio=5.0)
+    acquiring = AcquisitionMetric(zspread=1.50, multiple=2.00, ratio=3.00)
     viability = ViabilityMetric(moneyness=0.15, tightness=0.15, activity=0.30)
     valuing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
