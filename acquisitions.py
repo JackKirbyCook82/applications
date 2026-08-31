@@ -77,8 +77,8 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
         acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metric=acquiring, limit=1)
-        acquisition_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
-        acquisition_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
+        order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
+        orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
         option_downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         option_filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
@@ -94,8 +94,8 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
                 partition = option_valuing(partition, interest=interest, dividends=dividends, **valuing)
                 acquisitions = acquisition_calculator(partition)
                 if not bool(acquisitions): continue
-                orders = acquisition_uploader(acquisitions, term=term, tenure=tenure)
-                acquisition_file.save(orders, mode="a")
+                orders = order_uploader(acquisitions, term=term, tenure=tenure)
+                orders_file.save(orders, mode="a")
                 return
 
 
