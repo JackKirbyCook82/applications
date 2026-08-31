@@ -94,7 +94,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
                 partition = option_valuing(partition, interest=interest, dividends=dividends, **valuing)
                 acquisitions = acquisition_calculator(partition)
                 if not bool(acquisitions): continue
-                orders = acquisition_uploader(acquisitions, term=term, tenure=tenure, dryrun=True)
+                orders = acquisition_uploader(acquisitions, term=term, tenure=tenure)
                 acquisition_file.save(orders, mode="a")
                 return
 
