@@ -54,7 +54,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     localizing = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = ProspectSlippage(entry=0.25, exit=0.35)
     costing = ProspectCosting(slippage=slippage, commissions=0.65 / 100)
-    divesting = DivestitureMetric(multiple=0.75, ratio=0.75, mode="ANY")
+    divesting = DivestitureMetric(multiple=0.25, ratio=0.25, eager=True)
     valuing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
