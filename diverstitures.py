@@ -86,8 +86,8 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         option_valuing = OptionValuing(screen=variance_screener, surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
 
         portfolio = portfolio_downloader()
-        orders = orders_file.load(mode="r")
-        portfolio = portfolio.merge(orders["order", "asset", "spread"], keys=["asset"], how="left", validate="one_to_one")
+        orders = orders_file.load(mode="r", columns=["order", "asset"])
+        portfolio = portfolio.merge(orders, keys=["asset"], how="left", validate="one_to_one")
         for ticker, holdings in portfolio.groupby("ticker"):
             symbol = Symbol(ticker)
             expires = expire(DateRange(holdings["expires"].to_list()))
