@@ -34,7 +34,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.prospects import ProspectSlippage, ProspectCosting
+from options.targets import TargetSlippage, TargetCosting
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure, Spread
 from finance.querys import Symbol
@@ -51,8 +51,8 @@ __license__ = "MIT License"
 
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
-    slippage = ProspectSlippage(entry=0.25, exit=0.35)
-    costing = ProspectCosting(slippage=slippage, commissions=0.65 / 100)
+    slippage = TargetSlippage(entry=0.25, exit=0.35)
+    costing = TargetCosting(slippage=slippage, commissions=0.65 / 100)
     acquiring = AcquisitionMetric(zspread=1.50, multiple=2.00, ratio=3.00)
     viability = ViabilityMetric(moneyness=0.15, tightness=0.15, activity=0.30)
     valuing = dict(method="regression", smoothing=1/10, weights=None)
@@ -76,6 +76,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
+        prospect_calculator = ProspectCalculator(name="ProspectCalculator")
         acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", spreads=spreads, costing=costing, metric=acquiring, limit=1)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
@@ -92,6 +93,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
             options = option_pricing(options, interest=interest, dividends=dividends)
             for partition in partition_calculator(options):
                 partition = option_valuing(partition, interest=interest, dividends=dividends, **valuing)
+                prospects = prospect_calculator(partition)
                 acquisitions = acquisition_calculator(partition)
                 if not bool(acquisitions): continue
                 orders = order_uploader(acquisitions, term=term, tenure=tenure)
