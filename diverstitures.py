@@ -30,14 +30,15 @@ from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, Alpac
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from alpaca.orders import AlpacaOrderUploader, AlpacaOrderFile
 from options import OptionCalculator, SanityFilter, ViabilityFilter
-from options.localizing import ProximityCalculator, LocalizingVariables
+from options.localizing import ProximityCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
-from options.divestitures import DivestitureCalculator, DivestitureMetric
+from options.divestitures import DivestitureCalculator, DivestitureMetrics, DivestitureTargets, DivestitureWeights, DivestiturePriority
+from options.prospects import ProspectPortfolioCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.targets import TargetSlippage, TargetCosting
+from options.targets import Slippage, Costing
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol, Contract
@@ -67,11 +68,14 @@ class HoldingValuing:
 
 
 def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
-    localizing = LocalizingVariables.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
-    slippage = TargetSlippage(entry=0.25, exit=0.35)
-    costing = TargetCosting(slippage=slippage, commissions=0.65 / 100)
-    divesting = DivestitureMetric(multiple=0.25, ratio=0.25, eager=True)
-    valuing = dict(method="regression", smoothing=1/10, weights=None)
+    localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    slippage = Slippage(entry=0.25, exit=0.35)
+    costing = Costing(slippage=slippage, commissions=0.65 / 100)
+    metrics = DivestitureMetrics(multiple=0.25, ratio=0.25, eager=True)
+    targets = DivestitureTargets(multiple=1.00, ratio=1.00)
+    weights = DivestitureWeights(multiple=0.45, ratio=0.55)
+    priority = DivestiturePriority(targets=targets, weights=weights)
+    surfacing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
 
@@ -92,8 +96,8 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
-        prospect_calculator = ProspectCalculator(name="ProspectCalculator")
-        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", costing=costing, metric=divesting)
+        prospect_calculator = ProspectPortfolioCalculator(name="ProspectCalculator")
+        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
@@ -113,10 +117,10 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
             options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
-            holdings = holding_valuing(holdings, options, interest=interest, dividends=dividends, **valuing)
+            holdings = holding_valuing(holdings, options, interest=interest, dividends=dividends, **surfacing)
             holdings = pd.concat(holdings, axis=1)
             prospects = prospect_calculator(holdings)
-            divestitures = divestiture_calculator(holdings)
+            divestitures = divestiture_calculator(prospects)
             if not bool(divestitures): continue
             orders = order_uploader(divestitures, term=term, tenure=tenure)
             orders_file.save(orders, mode="a")
