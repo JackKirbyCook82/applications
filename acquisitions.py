@@ -26,7 +26,7 @@ ORDERS = REPOSITORY / "orders"
 from solutions.options import OptionDownloading, OptionFiltering, OptionPricing, OptionValuing
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.orders import AlpacaOrderUploader, AlpacaOrderFile
-from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetric
+from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetrics
 from options.localizing import PartitionCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.acquisitions import AcquisitionCalculator, AcquisitionMetrics, AcquisitionTargets, AcquisitionWeights, AcquisitionPriority
@@ -58,7 +58,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     targets = AcquisitionTargets(zspread=3.00, multiple=5.00, ratio=10.00)
     weights = AcquisitionWeights(zspread=0.30, multiple=0.30, ratio=0.40)
     priority = AcquisitionPriority(targets=targets, weights=weights)
-    viability = ViabilityMetric(moneyness=0.15, tightness=0.15, activity=0.30)
+    viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
     surfacing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
@@ -70,7 +70,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", metric=viability)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", viability=viability)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -116,7 +116,7 @@ if __name__ == "__main__":
     parameters["expires"] = lambda tomorrow: DateRange(tomorrow + Timedelta(weeks=1), tomorrow + Timedelta(weeks=52))
     parameters["strikes"] = lambda underlying: NumberRange(0.95 * underlying, 1.05 * underlying)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
-    parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
+    parameters.update({"interest": np.log1p(0.05), "dividends": np.log1p(0.00)})
     main(*arguments, **parameters)
 
 

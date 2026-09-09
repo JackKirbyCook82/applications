@@ -29,7 +29,7 @@ from solutions.options import OptionDownloading, OptionFiltering, OptionPricing,
 from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.portfolio import AlpacaPortfolioDownloader
 from alpaca.orders import AlpacaOrderUploader, AlpacaOrderFile
-from options import OptionCalculator, SanityFilter, ViabilityFilter
+from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetrics
 from options.localizing import ProximityCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.divestitures import DivestitureCalculator, DivestitureMetrics, DivestitureTargets, DivestitureWeights, DivestiturePriority
@@ -57,24 +57,25 @@ __license__ = "MIT License"
 class HoldingValuing:
     surfacing: Callable; valuing: Callable
 
-    def __call__(self, holdings, options, /, interest, dividends, method="regression", smoothing=1/10, weights=None, **kwargs):
+    def __call__(self, holding, options, /, interest, dividends, method="regression", smoothing=1/10, weights=None, **kwargs):
         columns = list(Contract) + ["underlying", "volatility", "market", "forecast", "zscore", "bid", "ask", "gap", "tightness", "moneyness", "activity", "delta", "gamma", "theta", "vega"]
         hyperparams = dict(method=method, smoothing=smoothing, weights=weights)
-        for order, holding in holdings.groupby("order"):
-            proximity = self.surfacing(options, holding)
+        for order, securities in holding.groupby("order"):
+            proximity = self.surfacing(options, securities)
             proximity = self.valuing(proximity, interest=interest, dividends=dividends, **hyperparams)
-            holding = holding.merge(proximity[columns], on=list(Contract), how="left", validate="many_to_one")
-            yield holding
+            securities = securities.merge(proximity[columns], on=list(Contract), how="left", validate="many_to_one")
+            yield securities
 
 
 def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
-    metrics = DivestitureMetrics(multiple=0.25, ratio=0.25, eager=True)
-    targets = DivestitureTargets(multiple=1.00, ratio=1.00)
-    weights = DivestitureWeights(multiple=0.45, ratio=0.55)
-    priority = DivestiturePriority(targets=targets, weights=weights)
+#    metrics = DivestitureMetrics(multiple=0.25, ratio=0.25, eager=True)
+#    targets = DivestitureTargets(multiple=1.00, ratio=1.00)
+#    weights = DivestitureWeights(multiple=0.45, ratio=0.55)
+#    priority = DivestiturePriority(targets=targets, weights=weights)
+    viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
     surfacing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
@@ -86,7 +87,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator")
-        viability_filter = ViabilityFilter(name="ViabilityFilter", active=0.30, money=0.15, tight=0.15)
+        viability_filter = ViabilityFilter(name="ViabilityFilter", viability=viability)
         volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         greek_calculator = GreekCalculator(name="GreekCalculator")
@@ -97,7 +98,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
         prospect_calculator = ProspectPortfolioCalculator(name="ProspectCalculator")
-        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing)
+#        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
@@ -109,22 +110,22 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
 
         portfolio = portfolio_downloader()
         orders = orders_file.load(mode="r", columns=["order", "asset", "spread"])
-        portfolio = portfolio.merge(orders, keys=["asset"], how="left", validate="one_to_one")
-        for ticker, holdings in portfolio.groupby("ticker"):
+        holdings = portfolio.holdings.merge(orders, on=["asset"], how="left", validate="one_to_one")
+        for ticker, holding in holdings.groupby("ticker"):
             symbol = Symbol(ticker)
-            expires = expire(DateRange(holdings["expires"].to_list()))
-            strikes = strike(NumberRange(holdings["strikes"].to_list()))
+            expires = expire(DateRange(holding["expire"].to_list()))
+            strikes = strike(NumberRange(holding["strike"].to_list()))
             options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
-            holdings = holding_valuing(holdings, options, interest=interest, dividends=dividends, **surfacing)
-            holdings = pd.concat(holdings, axis=1)
-            prospects = prospect_calculator(holdings)
-            divestitures = divestiture_calculator(prospects)
-            if not bool(divestitures): continue
-            orders = order_uploader(divestitures, term=term, tenure=tenure)
-            orders_file.save(orders, mode="a")
-            return
+            holding = holding_valuing(holding, options, interest=interest, dividends=dividends, **surfacing)
+            holding = pd.concat(holding, axis=0)
+            prospects = prospect_calculator(holding)
+#            divestitures = divestiture_calculator(prospects)
+#            if not bool(divestitures): continue
+#            orders = order_uploader(divestitures, term=term, tenure=tenure)
+#            orders_file.save(orders, mode="a")
+#            return
 
 
 if __name__ == "__main__":
@@ -137,7 +138,7 @@ if __name__ == "__main__":
     parameters["expire"] = lambda expires: DateRange(expires.minimum + Timedelta(weeks=-5), expires.maximum + Timedelta(weeks=+5))
     parameters["strike"] = lambda strikes: NumberRange(0.95 * strikes.minimum, 1.05 * strikes.maximum)
     parameters.update({"term": Terms.LIMIT, "tenure": Tenure.DAY})
-    parameters.update({"interest": np.log10(1 + 0.05), "dividends": np.log10(1 + 0.00)})
+    parameters.update({"interest": np.log1p(0.05), "dividends": np.log1p(0.00)})
     main(*arguments, **parameters)
 
 
