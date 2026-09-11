@@ -41,7 +41,7 @@ from options.greeks import GreekCalculator
 from options.targets import Slippage, Costing
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure
-from finance.querys import Symbol, Contract
+from finance.querys import Symbol
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
 from support.custom import DateRange, NumberRange
@@ -55,26 +55,24 @@ __license__ = "MIT License"
 
 @dataclass
 class HoldingValuing:
-    surfacing: Callable; valuing: Callable
+    proximity: Callable; valuing: Callable
 
     def __call__(self, holding, options, /, interest, dividends, method="regression", smoothing=1/10, weights=None, **kwargs):
-        columns = list(Contract) + ["underlying", "volatility", "market", "forecast", "zscore", "bid", "ask", "gap", "tightness", "moneyness", "activity", "delta", "gamma", "theta", "vega"]
         hyperparams = dict(method=method, smoothing=smoothing, weights=weights)
         for order, securities in holding.groupby("order"):
-            proximity = self.surfacing(options, securities)
+            proximity = self.proximity(options, securities)
             proximity = self.valuing(proximity, interest=interest, dividends=dividends, **hyperparams)
-            securities = securities.merge(proximity[columns], on=list(Contract), how="left", validate="many_to_one")
-            yield securities
+            yield proximity
 
 
 def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
-#    metrics = DivestitureMetrics(multiple=0.25, ratio=0.25, eager=True)
-#    targets = DivestitureTargets(multiple=1.00, ratio=1.00)
-#    weights = DivestitureWeights(multiple=0.45, ratio=0.55)
-#    priority = DivestiturePriority(targets=targets, weights=weights)
+    metrics =   # DivestitureMetrics(multiple=0.25, ratio=0.25, eager=True)
+    targets =   # DivestitureTargets(multiple=1.00, ratio=1.00)
+    weights =   # DivestitureWeights(multiple=0.45, ratio=0.55)
+    priority = DivestiturePriority(targets=targets, weights=weights)
     viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
     surfacing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
@@ -98,7 +96,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
         prospect_calculator = ProspectPortfolioCalculator(name="ProspectCalculator")
-#        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing)
+        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
@@ -106,7 +104,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         option_filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
         option_pricing = OptionPricing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
         option_valuing = OptionValuing(screen=variance_screener, surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
-        holding_valuing = HoldingValuing(surfacing=proximity_calculator, valuing=option_valuing)
+        holding_valuing = HoldingValuing(proximity=proximity_calculator, valuing=option_valuing)
 
         portfolio = portfolio_downloader()
         orders = orders_file.load(mode="r", columns=["order", "asset", "spread"])
@@ -118,14 +116,15 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
             options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
+            holding = holding.merge(options, on=["osi"], how="left", validate="one_to_one")
             holding = holding_valuing(holding, options, interest=interest, dividends=dividends, **surfacing)
-            holding = pd.concat(holding, axis=0)
+            holding = pd.concat(list(holding), axis=0)
             prospects = prospect_calculator(holding)
-#            divestitures = divestiture_calculator(prospects)
-#            if not bool(divestitures): continue
-#            orders = order_uploader(divestitures, term=term, tenure=tenure)
-#            orders_file.save(orders, mode="a")
-#            return
+            divestitures = divestiture_calculator(prospects)
+            if not bool(divestitures): continue
+            orders = order_uploader(divestitures, term=term, tenure=tenure)
+            orders_file.save(orders, mode="a")
+            return
 
 
 if __name__ == "__main__":
