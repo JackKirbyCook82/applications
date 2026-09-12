@@ -41,7 +41,8 @@ from options.greeks import GreekCalculator
 from options.targets import Slippage, Costing
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure
-from finance.querys import Symbol
+from finance.querys import Symbol, Contract
+from finance.osi import OSI
 from webscraping.webreaders import WebReader
 from support.surface import SurfaceCreator
 from support.custom import DateRange, NumberRange
@@ -59,10 +60,15 @@ class HoldingValuing:
 
     def __call__(self, holding, options, /, interest, dividends, method="regression", smoothing=1/10, weights=None, **kwargs):
         hyperparams = dict(method=method, smoothing=smoothing, weights=weights)
+        options["osi"] = options[list(Contract)].apply(OSI)
+        options = options.drop(list(Contract), axis=1, inplace=False)
+        holding = holding.merge(options[["osi", "tau", "mae", "tiv"]], on="osi", how="left", validate="one_to_one")
         for order, securities in holding.groupby("order"):
-            proximity = self.proximity(options, securities)
+            proximity = self.proximity(options, securities).drop(["tau", "mae", "tiv"], axis=1, inplace=False)
             proximity = self.valuing(proximity, interest=interest, dividends=dividends, **hyperparams)
-            yield proximity
+            proximity = proximity.drop(["tau", "mae", "tiv"], axis=1, inplace=False)
+            securities = securities.merge(proximity, on="osi", how="left", validate="one_to_one")
+            yield securities
 
 
 def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
@@ -116,7 +122,6 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
             options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
-            holding = holding.merge(options, on=["osi"], how="left", validate="one_to_one")
             holding = holding_valuing(holding, options, interest=interest, dividends=dividends, **surfacing)
             holding = pd.concat(list(holding), axis=0)
             prospects = prospect_calculator(holding)
