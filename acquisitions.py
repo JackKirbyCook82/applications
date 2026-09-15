@@ -53,14 +53,14 @@ __license__ = "MIT License"
 
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
-    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1, prob=1/9) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
+    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
-    metrics = AcquisitionMetrics(zspread=1.50, multiple=2.00, ratio=3.00)
-    targets = AcquisitionTargets(zspread=3.00, multiple=5.00, ratio=10.00)
+    viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
+    metrics = AcquisitionMetrics(zspread=2.00, multiple=3.00, ratio=4.00)
+    targets = AcquisitionTargets(zspread=3.00, multiple=5.00, ratio=7.00)
     weights = AcquisitionWeights(zspread=0.30, multiple=0.30, ratio=0.40)
     priority = AcquisitionPriority(targets=targets, weights=weights)
-    viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
     surfacing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
@@ -83,7 +83,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
         prospect_calculator = ProspectMarketCalculator(name="ProspectCalculator", spreads=spreads, limit=1)
-        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", metrics=metrics, priority=priority, costing=costing, scenarios=scenarios)
+        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", metrics=metrics, priority=priority, costing=costing, scenarios=scenarios, halflife=10)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 

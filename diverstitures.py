@@ -33,7 +33,7 @@ from alpaca.orders import AlpacaOrderUploader, AlpacaOrderFile
 from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetrics
 from options.localizing import ProximityCalculator, Localizing
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
-from options.divestitures import DivestitureCalculator, DivestitureMetrics, DivestitureTargets, DivestitureWeights, DivestiturePriority
+from options.divestitures import DivestitureCalculator, DivestitureMetrics, DivestiturePriority
 from options.prospects import ProspectPortfolioCalculator
 from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
@@ -74,14 +74,12 @@ class HoldingValuing:
 
 def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
-    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1, prob=1/9) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
+    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
-    metrics = DivestitureMetrics(zspread=, multiple=, ratio=)
-    targets = DivestitureTargets(zspread=, multiple=, ratio=)
-    weights = DivestitureWeights(zspread=0.30, multiple=0.30, ratio=0.40)
-    priority = DivestiturePriority(targets=targets, weights=weights)
     viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
+    metrics = DivestitureMetrics()
+    priority = DivestiturePriority()
     surfacing = dict(method="regression", smoothing=1/10, weights=None)
     brokerage = Brokerage(Website.ALPACA, False)
     authenticator = Authenticator.load(AUTHENTICATORS)[brokerage]
@@ -104,7 +102,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
         prospect_calculator = ProspectPortfolioCalculator(name="ProspectCalculator")
-        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing, scenarios=scenarios)
+        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing, scenarios=scenarios, halflife=10)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
