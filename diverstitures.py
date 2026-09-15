@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from typing import Callable
+from itertools import product
 from dataclasses import dataclass
 from datetime import timedelta as Timedelta
 
@@ -38,7 +39,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.targets import Slippage, Costing
+from options.targets import Slippage, Costing, Scenario
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure
 from finance.querys import Symbol, Contract
@@ -73,6 +74,7 @@ class HoldingValuing:
 
 def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1, prob=1/9) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
     metrics = DivestitureMetrics(zspread=, multiple=, ratio=)
@@ -102,7 +104,7 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         proximity_calculator = ProximityCalculator(name="ProximityCalculator", localizing=localizing, samples=35, overlap=0.80)
         prospect_calculator = ProspectPortfolioCalculator(name="ProspectCalculator")
-        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing)
+        divestiture_calculator = DivestitureCalculator(name="DivestitureCalculator", metrics=metrics, priority=priority, costing=costing, scenarios=scenarios)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 

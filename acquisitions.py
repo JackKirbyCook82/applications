@@ -13,6 +13,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from pathlib import Path
+from itertools import product
 from datetime import timedelta as Timedelta
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,7 +36,7 @@ from options.volatility import VolatilityCalculator
 from options.valuations import ValuationCalculator
 from options.forwards import ForwardCalculator
 from options.greeks import GreekCalculator
-from options.targets import Slippage, Costing
+from options.targets import Slippage, Costing, Scenario
 from finance.brokers import Authenticator, Brokerage
 from finance.enumerations import Website, Terms, Tenure, Spread
 from finance.querys import Symbol
@@ -52,6 +53,7 @@ __license__ = "MIT License"
 
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
+    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1, prob=1/9) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
     metrics = AcquisitionMetrics(zspread=1.50, multiple=2.00, ratio=3.00)
@@ -81,7 +83,7 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
         prospect_calculator = ProspectMarketCalculator(name="ProspectCalculator", spreads=spreads, limit=1)
-        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", metrics=metrics, priority=priority, costing=costing)
+        acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", metrics=metrics, priority=priority, costing=costing, scenarios=scenarios)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
