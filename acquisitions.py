@@ -53,7 +53,7 @@ __license__ = "MIT License"
 
 def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/365)
-    scenarios = [Scenario(zscore=zscore, vpts=vpts, tdays=1, cdays=1) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
+    scenarios = [Scenario(zscore=zscore, vpts=vpts, days=1) for zscore, vpts in product(range(-1, 2), range(-1, 2))]
     slippage = Slippage(entry=0.25, exit=0.35)
     costing = Costing(slippage=slippage, commissions=0.65 / 100)
     viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
