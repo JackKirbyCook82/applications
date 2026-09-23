@@ -67,6 +67,7 @@ class HoldingValuing:
         for order, securities in holding.groupby("order"):
             proximity = self.proximity(options, securities).drop(["tau", "mae", "tiv"], axis=1, inplace=False)
             proximity = self.valuing(proximity, interest=interest, dividends=dividends, **hyperparams)
+            if bool(proximity.empty): continue
             proximity = proximity.drop(["tau", "mae", "tiv"], axis=1, inplace=False)
             securities = securities.merge(proximity, on="osi", how="left", validate="one_to_one")
             yield securities
@@ -129,7 +130,6 @@ def main(*args, expire, strike, term, tenure, interest, dividends, **kwargs):
             if not bool(divestitures): continue
             orders = order_uploader(divestitures, term=term, tenure=tenure)
             orders_file.save(orders, mode="a")
-            return
 
 
 if __name__ == "__main__":

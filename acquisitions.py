@@ -73,15 +73,15 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
-        volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
-        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
-        greek_calculator = GreekCalculator(name="GreekCalculator")
         forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tightness=0.15)
+        volatility_calculator = VolatilityCalculator(name="VolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
+        greek_calculator = GreekCalculator(name="GreekCalculator")
         variance_calculator = VarianceCalculator(name="VarianceCalculator")
+        partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, quality=50, overlap=0.80)
         variance_screener = VarianceScreener(name="VarianceScreener", neighbors=25, quantile=0.95, multiple=2.5)
-        variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
-        partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, samples=35, overlap=0.80)
+        variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
+        valuation_calculator = ValuationCalculator(name="ValuationCalculator")
         prospect_calculator = ProspectMarketCalculator(name="ProspectCalculator", spreads=spreads, limit=1)
         acquisition_calculator = AcquisitionCalculator(name="AcquisitionCalculator", metrics=acquisition, priority=priority, costing=costing, scenarios=scenarios, halflife=10)
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
@@ -99,12 +99,12 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
             options = option_pricing(options, interest=interest, dividends=dividends)
             for partition in partition_calculator(options):
                 partition = option_valuing(partition, interest=interest, dividends=dividends, **surfacing)
+                if bool(partition.empty): continue
                 prospects = prospect_calculator(partition)
                 acquisitions = acquisition_calculator(prospects)
                 if not bool(acquisitions): continue
                 orders = order_uploader(acquisitions, term=term, tenure=tenure)
                 orders_file.save(orders, mode="a")
-                return
 
 
 if __name__ == "__main__":
