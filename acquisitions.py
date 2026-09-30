@@ -25,7 +25,6 @@ ACCOUNTS = RESOURCES / "accounts.txt"
 ORDERS = REPOSITORY / "orders"
 
 from solutions.options import OptionDownloading, OptionFiltering, OptionPricing, OptionValuing
-from alpaca.market import AlpacaStockDownloader, AlpacaContractDownloader, AlpacaOptionDownloader
 from alpaca.orders import AlpacaOrderUploader, AlpacaOrderFile
 from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetrics
 from options.localizing import PartitionCalculator, Localizing
@@ -67,9 +66,9 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
     spreads = [Spread.FLY, Spread.CALENDAR]
 
     with WebReader(delay=1) as source:
-        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
-        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticator)
-        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
+#        stock_downloader = AlpacaStockDownloader(name="StockDownloader", source=source, authenticator=authenticator)
+#        contract_downloader = AlpacaContractDownloader(name="ContractDownloader", source=source, authenticator=authenticator)
+#        option_downloader = AlpacaOptionDownloader(name="OptionDownloader", source=source, authenticator=authenticator)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
@@ -87,14 +86,14 @@ def main(*args, tickers, expires, strikes, term, tenure, interest, dividends, **
         order_uploader = AlpacaOrderUploader(name="AlpacaOrderUploader", source=source, authenticator=authenticator)
         orders_file = AlpacaOrderFile(name="AlpacaOrderFile", file=ORDERS)
 
-        option_downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
+#        option_downloading = OptionDownloading(stocks=stock_downloader, contracts=contract_downloader, options=option_downloader)
         option_filtering = OptionFiltering(sanity=sanity_filter, options=option_calculator, viability=viability_filter)
         option_pricing = OptionPricing(volatility=volatility_calculator, greeks=greek_calculator, forward=forward_calculator, variance=variance_calculator)
         option_valuing = OptionValuing(screen=variance_screener, surface=surface_creator, standardize=variance_standardizer, valuation=valuation_calculator)
 
         symbols = list(map(Symbol, tickers))
         for symbol in symbols:
-            options = option_downloading(symbol, expires=expires, strikes=strikes)
+#            options = option_downloading(symbol, expires=expires, strikes=strikes)
             options = option_filtering(options)
             options = option_pricing(options, interest=interest, dividends=dividends)
             for partition in partition_calculator(options):
