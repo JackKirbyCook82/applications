@@ -17,11 +17,6 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
-ACCOUNTS = RESOURCES / "accounts.txt"
-
-from ibkr.latest.quotes import IKBRStockQuotesLatestDownloader, IKBROptionQuotesLatestDownloader
-from ibkr.contracts import IKBRContractDownloader
-from ibkr.sockets import IBKRSocket
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -32,9 +27,7 @@ __license__ = "MIT License"
 
 def main(*args, **kwargs):
     with IBKRSocket(delay=1, host="127.0.0.1", port=7497, client=1) as source:
-        stock_downloader = IKBRStockQuotesLatestDownloader(name="StockDownloader", source=source)
-        contract_downloader = IKBRContractDownloader(name="ContractDownloader", source=source)
-        option_downloader = IKBROptionQuotesLatestDownloader(name="OptionDownloader", source=source)
+        pass
 
 
 if __name__ == "__main__":
