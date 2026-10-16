@@ -18,6 +18,9 @@ if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
 
+from ibkr.contracts import IbkrContractDownloader
+from ibkr.website import IbkrSocket
+
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = []
@@ -26,7 +29,7 @@ __license__ = "MIT License"
 
 
 def main(*args, **kwargs):
-    with IBKRSocket(delay=1, host="127.0.0.1", port=7497, client=1) as source:
+    with IbkrSocket(client=1, host="127.0.0.1", port=7497, delay=1) as source:
         pass
 
 
