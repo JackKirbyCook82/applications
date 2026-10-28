@@ -46,7 +46,7 @@ class Downloader:
         self.ticks = IbkrTradeOptionTicksDownloader(name="TicksDownloader", source=source)
 
 
-def main(*args, ticker="SPY", expires=(7, 7*4), history=20, zscore=1.5, interest=np.log1p(0.05), **kwargs):
+def main(*args, ticker, expires, history, zscore, interest, **kwargs):
     product = Symbol(ticker)
     today = Datetime.today().date()
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
@@ -70,6 +70,7 @@ if __name__ == "__main__":
     pd.set_option("display.max_columns", 50)
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.width", 250)
+    main(ticker="SPY", expires=(7, 7*4), history=20, zscore=1.5, interest=np.log1p(0.05))
 
 
 
