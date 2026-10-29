@@ -55,7 +55,7 @@ def main(*args, ticker, expires, history, zscore, interest, **kwargs):
             stock = subscription[product]
             spot = stock.price.trade
             volatility = stock.volatility.implied
-            dividends = stock.dividend.predicted
+            dividends = np.log1p(stock.dividends.predicted / spot)
         tau = (max(expires) + history) / 365
         forward = spot * np.exp(np.subtract(interest, dividends) * tau)
         strikes = NumberRange([forward * np.exp(zscore * index * volatility * np.sqrt(tau)) for index in (-1, +1)])
