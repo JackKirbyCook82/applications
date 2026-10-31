@@ -10,15 +10,18 @@ Created on Sun Oct 4 2026
 import sys
 import logging
 import warnings
+import numpy as np
 import pandas as pd
 from pathlib import Path
+from datetime import datetime as Datetime
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
 
-from ibkr.website import IbkrSocket
+from ibkr.website import IbkrSocket, IbkrSubscription
+from finance.querys import Symbol
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -27,9 +30,15 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-def main(*args, **kwargs):
+def main(*args, ticker, expires, interest, **kwargs):
+    product = Symbol(ticker)
+    today = Datetime.today().date()
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
-        pass
+        with IbkrSubscription(source, product=product) as subscription:
+            stock = subscription[product]
+            spot = stock.price.trade
+            volatility = stock.volatility.implied
+            dividends = np.log1p(stock.dividends.predicted / spot)
 
 
 if __name__ == "__main__":
