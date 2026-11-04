@@ -22,6 +22,7 @@ RESOURCES = ROOT / "resources"
 
 from ibkr.website import IbkrSocket, IbkrSubscription
 from ibkr.contracts import IbkrContractDownloader
+from options.settlements import SettlementCalculator
 from finance.querys import Symbol
 
 __version__ = "1.0.0"
@@ -35,13 +36,13 @@ def main(*args, ticker, expires, zscore, interest, **kwargs):
     product = Symbol(ticker)
     today = Datetime.today().date()
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
-        contract_downloader = IbkrContractDownloader(name="ContractDownloader", source=source, today=today)
+        settlement_calculator = SettlementCalculator(name="SettlementCalculator", today=today, zscore=zscore)
+        contract_downloader = IbkrContractDownloader(name="ContractDownloader", source=source)
         with IbkrSubscription(source, product=product) as subscription:
             stock = subscription[product]
-            product["spot"] = stock.price.trade
-            product["volatility"] = stock.volatility.implied
-            product["dividend"] = np.log1p(stock.dividends.predicted / stock.price.trade)
-        contracts = contract_downloader(product, expires=expires, today=today, zscore=zscore, interest=interest)
+            parameters = dict(spot=stock.price.trade, volatility=stock.volatility.implied, dividends=np.log1p(stock.dividends.predicted / stock.price.trade))
+        settlements = settlement_calculator(expires, interest=interest, **parameters)
+        contracts = contract_downloader(product, settlements=settlements)
 
 
 
