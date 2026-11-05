@@ -40,7 +40,10 @@ def main(*args, ticker, expires, zscore, interest, **kwargs):
         contract_downloader = IbkrContractDownloader(name="ContractDownloader", source=source)
         with IbkrSubscription(source, product=product) as subscription:
             stock = subscription[product]
-            parameters = dict(spot=stock.price.trade, volatility=stock.volatility.implied, dividends=np.log1p(stock.dividends.predicted / stock.price.trade))
+            spot = (stock.price.bid + stock.price.ask) / 2
+            volatility = stock.volatility.implied
+            dividends = np.log1p(stock.dividends.predicted / spot)
+            parameters = dict(spot=spot, volatility=volatility, dividends=dividends)
         settlements = settlement_calculator(expires, interest=interest, **parameters)
         contracts = contract_downloader(product, settlements=settlements)
 
