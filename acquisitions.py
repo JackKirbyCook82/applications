@@ -32,6 +32,7 @@ from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.localizing import PartitionCalculator, Localizing
 from options.valuations import ValuationCalculator
+from finance import Empty
 from finance.querys import Symbol
 from support.surface import SurfaceCreator, SurfaceError
 from support.custom import DateRange
@@ -51,14 +52,14 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
         settlement_calculator = SettlementCalculator(name="SettlementCalculator", today=today, zscore=zscore)
         contract_downloader = IbkrContractDownloader(name="ContractDownloader", source=source)
-        option_downloader = IbkrOptionSpotDownloader(name="OptionDownloader", source=source)
+        option_downloader = IbkrOptionSpotDownloader(name="OptionDownloader", today=today, source=source)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator")
         viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
         forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tightness=0.15)
         implied_calculator = ImpliedVolatilityCalculator(name="ImpliedVolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         greek_calculator = GreekCalculator(name="GreekCalculator")
-        variance_calculator = VarianceCalculator(name="VarianceCalculator")
+        variance_calculator = VarianceCalculator(name="VarianceCalculator", today=today)
         partition_calculator = PartitionCalculator(name="PartitionCalculator", localizing=localizing, quality=50, overlap=0.80)
         variance_screener = VarianceScreener(name="VarianceScreener", neighbors=25, quantile=0.95, multiple=2.5)
         surface_creator = SurfaceCreator(name="SurfaceCreator", columns="tau|mae|tiv", quantity=35, gridsize=100, samplesize=5)
@@ -72,28 +73,36 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             dividends = np.log1p(stock.dividends.predicted / underlying)
             parameters = dict(underlying=underlying, volatility=volatility, dividends=dividends)
 
-        settlements = settlement_calculator(expires, interest=interest, **parameters)
-        contracts = contract_downloader(product, settlements=settlements)
-        options = option_downloader(contracts)
-        options["underlying"] = underlying
-        options["predicted"] = volatility
-        options = sanity_filter(options)
-        options = option_calculator(options)
-        options = viability_filter(options)
-        options = forward_calculator(options, interest=interest, dividends=dividends)
-        options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
-        options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
-        options = variance_calculator(options)
+        try:
+            settlements = settlement_calculator(expires, interest=interest, **parameters)
+            contracts = contract_downloader(product, settlements=settlements)
+            options = option_downloader(contracts)
+            options["underlying"] = underlying
+            options["predicted"] = volatility
+            options = sanity_filter(options)
+            options = option_calculator(options)
+            options = viability_filter(options)
+            options = forward_calculator(options, interest=interest, dividends=dividends)
+            options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
+            options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
+            options = variance_calculator(options)
+        except Empty:
+            return
 
         for partition in partition_calculator(options):
-            partition = variance_screener(partition)
-            try: surface = surface_creator(partition, method="regression", smoothing=1/10, weights=None)
-            except SurfaceError: continue
-            partition = variance_standardizer(partition, surface)
-            partition["tsv"] = surface(partition["tau"], partition["mae"])
-            partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
-            partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
-            if bool(partition.empty): continue
+            try:
+                screened = variance_screener(partition)
+                try: surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
+                except SurfaceError: continue
+                partition = variance_standardizer(partition, surface)
+                partition["tsv"] = surface(partition["tau"], partition["mae"])
+                partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
+                partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
+                partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
+                if bool(partition.empty): continue
+
+            except Empty:
+                continue
 
 
 if __name__ == "__main__":
