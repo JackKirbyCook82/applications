@@ -32,7 +32,6 @@ from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.localizing import PartitionCalculator, Localizing
 from options.valuations import ValuationCalculator
-from finance import Empty
 from finance.querys import Symbol
 from support.surface import SurfaceCreator, SurfaceError
 from support.custom import DateRange
@@ -52,9 +51,9 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
         settlement_calculator = SettlementCalculator(name="SettlementCalculator", today=today, zscore=zscore)
         contract_downloader = IbkrContractDownloader(name="ContractDownloader", source=source)
-        option_downloader = IbkrOptionSpotDownloader(name="OptionDownloader", today=today, source=source)
+        option_downloader = IbkrOptionSpotDownloader(name="OptionDownloader", source=source)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
-        option_calculator = OptionCalculator(name="OptionCalculator")
+        option_calculator = OptionCalculator(name="OptionCalculator", today=today)
         viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
         forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tightness=0.15)
         implied_calculator = ImpliedVolatilityCalculator(name="ImpliedVolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
@@ -73,7 +72,6 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             dividends = np.log1p(stock.dividends.predicted / underlying)
             parameters = dict(underlying=underlying, volatility=volatility, dividends=dividends)
 
-        try:
             settlements = settlement_calculator(expires, interest=interest, **parameters)
             contracts = contract_downloader(product, settlements=settlements)
             options = option_downloader(contracts)
@@ -86,11 +84,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
             options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
             options = variance_calculator(options)
-        except Empty:
-            return
-
-        for partition in partition_calculator(options):
-            try:
+            for partition in partition_calculator(options):
                 screened = variance_screener(partition)
                 try: surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
                 except SurfaceError: continue
@@ -100,9 +94,6 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
                 partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
                 partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
                 if bool(partition.empty): continue
-
-            except Empty:
-                continue
 
 
 if __name__ == "__main__":
@@ -114,3 +105,4 @@ if __name__ == "__main__":
     sysToday = Datetime.today().date()
     sysExpires = DateRange([sysToday + Timedelta(weeks=1), sysToday + Timedelta(weeks=52)])
     main(ticker="SPY", expires=sysExpires, today=sysToday, zscore=1.5, interest=np.log1p(0.05))
+
