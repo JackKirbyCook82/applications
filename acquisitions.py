@@ -84,6 +84,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
             options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
             options = variance_calculator(options)
+
             for partition in partition_calculator(options):
                 screened = variance_screener(partition)
                 try: surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
