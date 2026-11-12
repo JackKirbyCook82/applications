@@ -32,7 +32,7 @@ from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.localizing import PartitionCalculator, Localizing
 from options.valuations import ValuationCalculator
-from finance.querys import Symbol
+from finance.querys import Querys
 from support.surface import SurfaceCreator, SurfaceError
 from support.custom import DateRange
 
@@ -46,7 +46,7 @@ __license__ = "MIT License"
 def main(*args, ticker, expires, today, zscore, interest, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/252)
     viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
-    product = Symbol(ticker)
+    product = Querys.Symbol(ticker)
 
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
         settlement_calculator = SettlementCalculator(name="SettlementCalculator", today=today, zscore=zscore)
