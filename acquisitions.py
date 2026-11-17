@@ -33,7 +33,7 @@ from options.variances import VarianceCalculator, VarianceScreener, VarianceStan
 from options.localizing import PartitionCalculator, Localizing
 from options.valuations import ValuationCalculator
 from finance.querys import Querys
-from support.surface import SurfaceCreator, SurfaceError
+from support.surface import SurfaceCreator
 from support.custom import DateRange
 
 __version__ = "1.0.0"
@@ -87,8 +87,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
 
             for partition in partition_calculator(options):
                 screened = variance_screener(partition)
-                try: surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
-                except SurfaceError: continue
+                surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
                 partition = variance_standardizer(partition, surface)
                 partition["tsv"] = surface(partition["tau"], partition["mae"])
                 partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
