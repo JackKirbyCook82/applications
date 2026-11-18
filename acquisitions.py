@@ -74,34 +74,39 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             dividends = np.log1p(stock.dividends.predicted / underlying)
             parameters = dict(underlying=underlying, volatility=volatility, dividends=dividends)
 
-        try:
-            settlements = settlement_calculator(expires, interest=interest, **parameters)
-            contracts = contract_downloader(product, settlements=settlements)
-            options = option_downloader(contracts)
-            options["underlying"] = underlying
-            options["predicted"] = volatility
-            options = sanity_filter(options)
-            options = option_calculator(options)
-            options = viability_filter(options)
-            options = forward_calculator(options, interest=interest, dividends=dividends)
-            options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
-            options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
-            options = variance_calculator(options)
-        except (Errors.Inlet.Missing, Errors.Inlet.Empty): return
-        except (Errors.Outlet.Missing, Errors.Outlet.Empty): return
-
-        for partition in partition_calculator(options):
             try:
-                screened = variance_screener(partition)
-                surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
-                partition = variance_standardizer(partition, surface)
-                partition["tsv"] = surface(partition["tau"], partition["mae"])
-                partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
-                partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
-                partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
-                # ...
-            except (Errors.Inlet.Missing, Errors.Inlet.Empty): continue
-            except (Errors.Outlet.Missing, Errors.Outlet.Empty): continue
+                settlements = settlement_calculator(expires, interest=interest, **parameters)
+                contracts = contract_downloader(product, settlements=settlements)
+
+#               ... OPTION DOWNLOADER MUST FIND UNDERLYING AND VOLATILITY FRESH ...
+                options = option_downloader(contracts)
+
+#                stock = subscription[product]
+#                options["underlying"] = (stock.price.bid + stock.price.ask) / 2
+#                options["predicted"] = stock.volatility.implied
+
+                options = sanity_filter(options)
+                options = option_calculator(options)
+                options = viability_filter(options)
+                options = forward_calculator(options, interest=interest, dividends=dividends)
+                options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
+                options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
+                options = variance_calculator(options)
+            except (Errors.Inlet.Missing, Errors.Inlet.Empty): return
+            except (Errors.Outlet.Missing, Errors.Outlet.Empty): return
+
+            for partition in partition_calculator(options):
+                try:
+                    screened = variance_screener(partition)
+                    surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
+                    partition = variance_standardizer(partition, surface)
+                    partition["tsv"] = surface(partition["tau"], partition["mae"])
+                    partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
+                    partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
+                    partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
+                    # ...
+                except (Errors.Inlet.Missing, Errors.Inlet.Empty): continue
+                except (Errors.Outlet.Missing, Errors.Outlet.Empty): continue
 
 
 if __name__ == "__main__":
