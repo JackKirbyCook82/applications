@@ -35,6 +35,7 @@ from options.valuations import ValuationCalculator
 from finance.querys import Querys
 from support.surface import SurfaceCreator
 from support.custom import DateRange
+from support.pipeline import Errors
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -72,6 +73,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             dividends = np.log1p(stock.dividends.predicted / underlying)
             parameters = dict(underlying=underlying, volatility=volatility, dividends=dividends)
 
+        try:
             settlements = settlement_calculator(expires, interest=interest, **parameters)
             contracts = contract_downloader(product, settlements=settlements)
             options = option_downloader(contracts)
@@ -84,8 +86,10 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
             options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
             options = variance_calculator(options)
+        except tuple(Errors): return
 
-            for partition in partition_calculator(options):
+        for partition in partition_calculator(options):
+            try:
                 screened = variance_screener(partition)
                 surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
                 partition = variance_standardizer(partition, surface)
@@ -93,6 +97,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
                 partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
                 partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
                 partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
+            except tuple(Errors): continue
 
 
 if __name__ == "__main__":
