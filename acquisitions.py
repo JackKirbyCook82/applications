@@ -97,6 +97,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
                 partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
                 partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
                 partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
+                # ...
             except tuple(Errors): continue
 
 
