@@ -77,14 +77,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
             try:
                 settlements = settlement_calculator(expires, interest=interest, **parameters)
                 contracts = contract_downloader(product, settlements=settlements)
-
-#               ... OPTION DOWNLOADER MUST FIND UNDERLYING AND VOLATILITY FRESH ...
                 options = option_downloader(contracts)
-
-#                stock = subscription[product]
-#                options["underlying"] = (stock.price.bid + stock.price.ask) / 2
-#                options["predicted"] = stock.volatility.implied
-
                 options = sanity_filter(options)
                 options = option_calculator(options)
                 options = viability_filter(options)
