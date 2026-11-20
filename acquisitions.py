@@ -21,9 +21,9 @@ if str(ROOT) not in sys.path: sys.path.append(str(ROOT))
 REPOSITORY = ROOT / "repository"
 RESOURCES = ROOT / "resources"
 
-from ibkr.website import IbkrSocket, IbkrSubscription
 from ibkr.contracts import IbkrContractDownloader
-from ibkr.spot import IbkrOptionSpotDownloader
+from ibkr.spots import IbkrOptionSpotsDownloader
+from ibkr.socket import IbkrSocket
 from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetrics
 from options.settlements import SettlementCalculator
 from options.forwards import ForwardCalculator
@@ -53,7 +53,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
     with IbkrSocket(host="127.0.0.1", port=7497, delay=1) as source:
         settlement_calculator = SettlementCalculator(name="SettlementCalculator", today=today, zscore=zscore)
         contract_downloader = IbkrContractDownloader(name="ContractDownloader", source=source)
-        option_downloader = IbkrOptionSpotDownloader(name="OptionDownloader", source=source)
+        option_downloader = IbkrOptionSpotsDownloader(name="OptionDownloader", source=source)
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator", today=today)
         viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
@@ -67,39 +67,32 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
         variance_standardizer = VarianceStandardizer(name="VarianceStandardizer", neighbors=25)
         valuation_calculator = ValuationCalculator(name="ValuationCalculator")
 
-        with IbkrSubscription(source, product=product) as subscription:
-            stock = subscription[product]
-            underlying = (stock.price.bid + stock.price.ask) / 2
-            volatility = stock.volatility.implied
-            dividends = np.log1p(stock.dividends.predicted / underlying)
-            parameters = dict(underlying=underlying, volatility=volatility, dividends=dividends)
+        try:
+            settlements = settlement_calculator(expires, interest=interest)
+            contracts = contract_downloader(product, settlements=settlements)
+            options = option_downloader(contracts)
+            options = sanity_filter(options)
+            options = option_calculator(options)
+            options = viability_filter(options)
+            options = forward_calculator(options, interest=interest)
+            options = implied_calculator(options, interest=interest, price="market")
+            options = greek_calculator(options, interest=interest, volatility="implied")
+            options = variance_calculator(options)
+        except (Errors.Inlet.Missing, Errors.Inlet.Empty): return
+        except (Errors.Outlet.Missing, Errors.Outlet.Empty): return
 
+        for partition in partition_calculator(options):
             try:
-                settlements = settlement_calculator(expires, interest=interest, **parameters)
-                contracts = contract_downloader(product, settlements=settlements)
-                options = option_downloader(contracts)
-                options = sanity_filter(options)
-                options = option_calculator(options)
-                options = viability_filter(options)
-                options = forward_calculator(options, interest=interest, dividends=dividends)
-                options = implied_calculator(options, interest=interest, dividends=dividends, price="market")
-                options = greek_calculator(options, interest=interest, dividends=dividends, volatility="implied")
-                options = variance_calculator(options)
-            except (Errors.Inlet.Missing, Errors.Inlet.Empty): return
-            except (Errors.Outlet.Missing, Errors.Outlet.Empty): return
-
-            for partition in partition_calculator(options):
-                try:
-                    screened = variance_screener(partition)
-                    surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None)
-                    partition = variance_standardizer(partition, surface)
-                    partition["tsv"] = surface(partition["tau"], partition["mae"])
-                    partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
-                    partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
-                    partition = valuation_calculator(partition, interest=interest, dividends=dividends, volatility="surfaced", valuation="forecast")
-                    # ...
-                except (Errors.Inlet.Missing, Errors.Inlet.Empty): continue
-                except (Errors.Outlet.Missing, Errors.Outlet.Empty): continue
+                screened = variance_screener(partition)
+                surface = surface_creator(screened, method="regression", smoothing=1/10, weights=None, extrapolate=True)
+                partition = variance_standardizer(partition, surface)
+                partition["tsv"] = surface(partition["tau"], partition["mae"])
+                partition = partition.where(partition["tsv"] >= 0).dropna(how="all", inplace=False)
+                partition["surfaced"] = np.sqrt(partition["tsv"] / partition["tau"])
+                partition = valuation_calculator(partition, interest=interest, volatility="surfaced", valuation="forecast")
+                # ...
+            except (Errors.Inlet.Missing, Errors.Inlet.Empty): continue
+            except (Errors.Outlet.Missing, Errors.Outlet.Empty): continue
 
 
 if __name__ == "__main__":
