@@ -26,11 +26,11 @@ from ibkr.spots import IbkrOptionSpotsDownloader
 from ibkr.socket import IbkrSocket
 from options import OptionCalculator, SanityFilter, ViabilityFilter, ViabilityMetrics
 from options.settlements import SettlementCalculator
-from options.forwards import ForwardCalculator
-from options.volatility import ImpliedVolatilityCalculator
+from options.forwards import ForwardCalculator, Forwarding
 from options.greeks import GreekCalculator
 from options.variances import VarianceCalculator, VarianceScreener, VarianceStandardizer
 from options.localizing import PartitionCalculator, Localizing
+from options.volatility import ImpliedVolatilityCalculator
 from options.valuations import ValuationCalculator
 from finance.querys import Querys
 from support.surface import SurfaceCreator
@@ -47,6 +47,7 @@ __license__ = "MIT License"
 def main(*args, ticker, expires, today, zscore, interest, **kwargs):
     localizing = Localizing.create(radius=(0.05, 0.12, 0.01), window=(1, 3, 1), coverage=(3, 10), limit=45/252)
     viability = ViabilityMetrics(moneyness=0.15, tightness=0.15, activity=0.30)
+    forwarding = Forwarding(forward=0.05, discount=0.02, error=0.05)
     expires = expires.tolist(interval=Timedelta(days=1))
     product = Querys.Symbol(ticker)
 
@@ -57,7 +58,7 @@ def main(*args, ticker, expires, today, zscore, interest, **kwargs):
         sanity_filter = SanityFilter(name="SanityFilter", size=5)
         option_calculator = OptionCalculator(name="OptionCalculator", today=today)
         viability_filter = ViabilityFilter(name="ViabilityFilter", metrics=viability)
-        forward_calculator = ForwardCalculator(name="ForwardCalculator", samplesize=5, tightness=0.15)
+        forward_calculator = ForwardCalculator(name="ForwardCalculator", forwarding=forwarding, samplesize=5, tightness=0.15)
         implied_calculator = ImpliedVolatilityCalculator(name="ImpliedVolatilityCalculator", low=1e-4, high=5.0, tol=1e-10, iters=100)
         greek_calculator = GreekCalculator(name="GreekCalculator")
         variance_calculator = VarianceCalculator(name="VarianceCalculator", today=today)
